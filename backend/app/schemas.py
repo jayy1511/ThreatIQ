@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from enum import Enum
+from datetime import datetime
 
 class RoleEnum(str, Enum):
     user = "user"
@@ -17,3 +18,14 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: RoleEnum
+
+# For returning analysis history
+class AnalysisOut(BaseModel):
+    id: int
+    text: str
+    sender: str | None
+    result: dict
+    created_at: datetime
+
+    class Config:
+        from_attributes = True   # Pydantic v2 replacement for orm_mode
