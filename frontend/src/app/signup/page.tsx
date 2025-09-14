@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { saveToken } from "@/lib/auth";
 
 export default function SignupPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,19 +21,13 @@ export default function SignupPage() {
       });
 
       if (!res.ok) throw new Error("Registration failed");
-
       const data = await res.json();
 
-      // ✅ Ensure backend returned a token
-      if (!data.access_token) {
-        throw new Error("No token received");
-      }
+      if (!data.access_token) throw new Error("No token received");
+      saveToken(data.access_token);
 
-      // Save token in localStorage
-      localStorage.setItem("token", data.access_token);
-
-      console.log("Signup successful, redirecting...");
-      router.push("/dashboard"); // ✅ redirect
+      // Hard navigate so the cookie is present on the next request
+      window.location.href = "/dashboard";
     } catch (err: any) {
       console.error("Signup error:", err);
       setError(err.message || "Failed to sign up");
@@ -61,14 +54,10 @@ export default function SignupPage() {
             onChange={(e) => setPassword(e.target.value)}
           />
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <Button className="w-full" onClick={handleSignup}>
-            Create Account
-          </Button>
+          <Button className="w-full" onClick={handleSignup}>Create Account</Button>
           <p className="text-sm text-center">
             Already have an account?{" "}
-            <a href="/login" className="text-primary hover:underline">
-              Login
-            </a>
+            <a href="/login" className="text-primary hover:underline">Login</a>
           </p>
         </CardContent>
       </Card>
