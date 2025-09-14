@@ -3,13 +3,23 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isLoggedIn } from "@/lib/auth";
 
 export default function AnalyzePage() {
+  const router = useRouter();
   const [messages, setMessages] = useState<
     { sender: "user" | "bot"; text: string }[]
   >([]);
   const [input, setInput] = useState("");
+
+  // ✅ Protect route
+  useEffect(() => {
+    if (!isLoggedIn()) {
+      router.push("/login");
+    }
+  }, [router]);
 
   const handleSend = () => {
     if (!input.trim()) return;

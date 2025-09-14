@@ -15,7 +15,9 @@ export function saveToken(token: string) {
     // Cookie so middleware can read it server-side
     // 7 days
     const maxAge = 60 * 60 * 24 * 7;
-    document.cookie = `token=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+    document.cookie = `token=${encodeURIComponent(
+      token
+    )}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
   } catch {}
 }
 
@@ -40,4 +42,26 @@ export function getToken(): string | null {
 
 export function isLoggedIn(): boolean {
   return !!getToken();
+}
+
+/* ----------------- NEW USER EMAIL HELPERS ----------------- */
+
+export function saveUser(email: string) {
+  try {
+    localStorage.setItem("email", email);
+  } catch {}
+}
+
+export function getUserEmail(): string | null {
+  try {
+    return localStorage.getItem("email");
+  } catch {
+    return null;
+  }
+}
+
+export function clearUser() {
+  try {
+    localStorage.removeItem("email");
+  } catch {}
 }

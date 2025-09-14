@@ -1,12 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { clearToken, getToken } from "@/lib/auth";
+import { clearToken, isLoggedIn } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
   const router = useRouter();
+
+  // ✅ Protect route
+  useEffect(() => {
+    if (!isLoggedIn()) {
+      router.push("/login");
+    }
+  }, [router]);
 
   const handleLogout = () => {
     clearToken();
