@@ -120,3 +120,7 @@
     @apply bg-background text-foreground;
   }
 }
+/* Hide Next.js devtools indicator */
+#__next-dev-tools-indicator {
+  display: none !important;
+}
