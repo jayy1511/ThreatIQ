@@ -7,7 +7,7 @@ from ..utils import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Ensure tables exist (simple approach for this project)
+# Ensure tables exist
 Base.metadata.create_all(bind=engine)
 
 def get_db():

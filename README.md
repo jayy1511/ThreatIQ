@@ -30,12 +30,12 @@ The goal of ThreatIQ is to support users in recognizing and understanding phishi
 ---
 
 ## Core Features
-- ✅ Chat interface for phishing analysis  
-- ✅ Heuristic checks (keywords, suspicious URLs, spoofed senders)  
-- ✅ VirusTotal + Whois lookups  
-- ✅ Generative AI reasoning (explanations + safe handling tips)  
-- ✅ User authentication (JWT-based) and role management (user/admin)  
-- ✅ Admin dashboard for usage statistics  
+- Chat interface for phishing analysis  
+- Heuristic checks (keywords, suspicious URLs, spoofed senders)  
+- VirusTotal + Whois lookups  
+- Generative AI reasoning (explanations + safe handling tips)  
+- User authentication (JWT-based) and role management (user/admin)  
+- Admin dashboard for usage statistics  
 
 ---
 
