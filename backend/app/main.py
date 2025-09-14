@@ -1,20 +1,26 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import auth, analyze   # add analyze router
+from .routers import auth, analyze
 
 app = FastAPI(title="ThreatIQ API")
 
+# CORS to allow Next.js frontend on port 3000
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:3000",   # Next.js frontend
+        "http://127.0.0.1:3000"    # alias
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Routers
 app.include_router(auth.router)
-app.include_router(analyze.router)   # NEW
+app.include_router(analyze.router)
 
+# Health check endpoint
 @app.get("/health")
 def health():
     return {"status": "ok"}
