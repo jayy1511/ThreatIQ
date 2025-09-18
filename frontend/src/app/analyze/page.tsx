@@ -14,7 +14,7 @@ export default function AnalyzePage() {
   >([]);
   const [input, setInput] = useState("");
 
-  // ✅ Protect route
+  // Protect route
   useEffect(() => {
     if (!isLoggedIn()) {
       router.push("/login");
