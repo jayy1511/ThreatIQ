@@ -1,5 +1,7 @@
 "use client";
 
+import { jwtDecode } from "jwt-decode";
+
 /**
  * Central helpers for storing and clearing the auth token.
  * We store in BOTH localStorage (for client reads) and a cookie (for middleware).
@@ -7,14 +9,11 @@
 
 export function saveToken(token: string) {
   try {
-    // Local storage (client side convenience)
     localStorage.setItem("token", token);
   } catch {}
 
   try {
-    // Cookie so middleware can read it server-side
-    // 7 days
-    const maxAge = 60 * 60 * 24 * 7;
+    const maxAge = 60 * 60 * 24 * 7; // 7 days
     document.cookie = `token=${encodeURIComponent(
       token
     )}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
@@ -27,7 +26,6 @@ export function clearToken() {
   } catch {}
 
   try {
-    // expire cookie immediately
     document.cookie = `token=; Path=/; Max-Age=0; SameSite=Lax`;
   } catch {}
 }
@@ -44,7 +42,7 @@ export function isLoggedIn(): boolean {
   return !!getToken();
 }
 
-/* ----------------- NEW USER EMAIL HELPERS ----------------- */
+/* ----------------- USER EMAIL HELPERS ----------------- */
 
 export function saveUser(email: string) {
   try {
@@ -54,7 +52,22 @@ export function saveUser(email: string) {
 
 export function getUserEmail(): string | null {
   try {
-    return localStorage.getItem("email");
+    // Try from localStorage first
+    const stored = localStorage.getItem("email");
+    if (stored) return stored;
+
+    // Try decode from token if email exists in payload
+    const token = getToken();
+    if (token) {
+      try {
+        const decoded: any = jwtDecode(token);
+        return decoded.email || null;
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
