@@ -1,6 +1,6 @@
 "use client"
 
-import { Pie, PieChart } from "recharts"
+import { Pie, PieChart, Cell } from "recharts"
 import {
   Card,
   CardContent,
@@ -27,8 +27,14 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
+// 🎨 Assign fixed colors for each judgment
+const COLORS: Record<string, string> = {
+  Safe: "#4ade80",      // green
+  Phishing: "#f87171",  // red
+  Other: "#a3a3a3",     // gray
+}
+
 export function ChartPieLabel({ data }: Props) {
-  // 🟢 Ensure no "unknown"
   const cleanedData = data.map((d) => ({
     ...d,
     type:
@@ -50,7 +56,19 @@ export function ChartPieLabel({ data }: Props) {
         >
           <PieChart>
             <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-            <Pie data={cleanedData} dataKey="value" label nameKey="type" />
+            <Pie
+              data={cleanedData}
+              dataKey="value"
+              label
+              nameKey="type"
+            >
+              {cleanedData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={COLORS[entry.type] || "#8884d8"}
+                />
+              ))}
+            </Pie>
           </PieChart>
         </ChartContainer>
       </CardContent>

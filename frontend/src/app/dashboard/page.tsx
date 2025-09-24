@@ -11,6 +11,7 @@ import { ChartPieLabel } from "@/components/charts/ChartPieLabel"
 export default function DashboardPage() {
   const router = useRouter()
   const [history, setHistory] = useState<any[]>([])
+  const [pieData, setPieData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -19,16 +20,27 @@ export default function DashboardPage() {
       return
     }
 
-    const fetchHistory = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/analyze/history", {
+        // Fetch history
+        const resHistory = await fetch("http://127.0.0.1:8000/analyze/history", {
           headers: {
             Authorization: `Bearer ${getToken()}`,
           },
         })
-        if (!res.ok) throw new Error("Failed to fetch history")
-        const data = await res.json()
-        setHistory(data)
+        if (!resHistory.ok) throw new Error("Failed to fetch history")
+        const dataHistory = await resHistory.json()
+        setHistory(dataHistory)
+
+        // Fetch judgments (pie chart)
+        const resPie = await fetch("http://127.0.0.1:8000/stats/judgments", {
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+          },
+        })
+        if (!resPie.ok) throw new Error("Failed to fetch judgments")
+        const dataPie = await resPie.json()
+        setPieData(dataPie)
       } catch (err) {
         console.error(err)
       } finally {
@@ -36,7 +48,7 @@ export default function DashboardPage() {
       }
     }
 
-    fetchHistory()
+    fetchData()
   }, [router])
 
   if (loading) {
@@ -70,18 +82,6 @@ export default function DashboardPage() {
       existing.count += 1
     } else {
       acc.push({ month, count: 1 })
-    }
-    return acc
-  }, [])
-
-  // Pie chart: judgments
-  const pieData = history.reduce((acc: any[], item) => {
-    const result = item.result?.ai_result?.judgment || "Unknown"
-    const existing = acc.find((x) => x.type === result)
-    if (existing) {
-      existing.value += 1
-    } else {
-      acc.push({ type: result, value: 1 })
     }
     return acc
   }, [])

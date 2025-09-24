@@ -10,28 +10,42 @@ type Message = { sender: "user" | "bot"; text?: string; structured?: any };
 export default function AnalyzePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || loading) return;
+
+    const userText = input; // capture current input
+    setInput(""); // clear input immediately
 
     // Add user message
-    setMessages((prev) => [...prev, { sender: "user", text: input }]);
+    setMessages((prev) => [...prev, { sender: "user", text: userText }]);
+
+    // Add "analyzing..." placeholder
+    const placeholderIndex = messages.length + 1;
+    setMessages((prev) => [
+      ...prev,
+      { sender: "bot", text: "Analyzing your message..." },
+    ]);
 
     try {
+      setLoading(true);
       const res = await fetch("http://127.0.0.1:8000/analyze/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
-        body: JSON.stringify({ text: input, sender: "" }),
+        body: JSON.stringify({ text: userText, sender: "" }),
       });
-
-      if (!res.ok) throw new Error("Analysis failed");
 
       const data = await res.json();
 
-      // 🟢 Clean and parse AI result
+      if (!res.ok) {
+        throw new Error(data?.detail || "Analysis failed");
+      }
+
+      // Clean and parse AI result
       let aiResult = data.ai_result || "";
       if (typeof aiResult === "string") {
         aiResult = aiResult.replace(/```json/gi, "").replace(/```/g, "").trim();
@@ -44,21 +58,30 @@ export default function AnalyzePage() {
         parsed = null;
       }
 
-      setMessages((prev) => [
-        ...prev,
-        parsed
-          ? { sender: "bot", structured: parsed }
-          : { sender: "bot", text: aiResult },
-      ]);
+      // Replace placeholder with actual result
+      setMessages((prev) =>
+        prev.map((msg, idx) =>
+          idx === placeholderIndex
+            ? parsed
+              ? { sender: "bot", structured: parsed }
+              : { sender: "bot", text: aiResult }
+            : msg
+        )
+      );
     } catch (err) {
       console.error("Error fetching analysis:", err);
-      setMessages((prev) => [
-        ...prev,
-        { sender: "bot", text: "⚠️ Failed to fetch analysis." },
-      ]);
-    }
 
-    setInput("");
+      // Replace placeholder with error
+      setMessages((prev) =>
+        prev.map((msg, idx) =>
+          idx === placeholderIndex
+            ? { sender: "bot", text: "Failed to fetch analysis." }
+            : msg
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -111,8 +134,11 @@ export default function AnalyzePage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          disabled={loading}
         />
-        <Button onClick={handleSend}>Send</Button>
+        <Button onClick={handleSend} disabled={loading}>
+          {loading ? "Analyzing..." : "Send"}
+        </Button>
       </div>
     </div>
   );
