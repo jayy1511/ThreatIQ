@@ -1,54 +1,85 @@
-# ThreatIQ – Phishing Awareness Chatbot
+# ThreatIQ – AI-Powered Phishing Detection Chatbot
 
-## About
-**ThreatIQ** is a phishing awareness chatbot that helps users detect suspicious emails or messages.  
-It combines heuristic analysis, free threat intelligence sources (VirusTotal, Whois), and generative AI reasoning to:
-- Flag phishing indicators (e.g., suspicious links, urgency, poor grammar).
-- Explain risks in simple terms.
-- Provide safe browsing and handling tips.  
-All with a strong focus on **privacy** and **security**.
+## Project Overview
+ThreatIQ is a prototype application that uses generative AI to analyze messages and detect potential phishing attempts. The system provides real-time analysis, user-friendly dashboards, and clear security insights. It is designed as part of the EPITA Bachelor 4th semester project on *Generative AIs & Chatbots*.
 
----
-
-## Project Goal
-The goal of ThreatIQ is to support users in recognizing and understanding phishing attempts.  
-
-**Example Workflow:**
-1. User pastes a suspicious email or message.
-2. Bot analyzes using heuristics + VirusTotal + Whois.
-3. Generative AI explains why it might be phishing.
-4. User receives safety tips (e.g., don’t click, report, delete).
+The platform combines:
+- A secure backend (FastAPI + SQLAlchemy + JWT).
+- A responsive frontend (Next.js + React + shadcn/ui + Recharts).
+- Integration with a generative AI model for phishing detection and explanation.
+- Dashboard analytics with visual insights.
 
 ---
 
-## Tech Stack
-- **Backend:** [FastAPI](https://fastapi.tiangolo.com/) (Python)  
-- **Frontend:** [ReactJS](https://react.dev/)  
-- **Database:** SQLite / PostgreSQL (user accounts, logs, stats)  
-- **AI Model:** [GPT4All](https://github.com/nomic-ai/gpt4all) via llama.cpp (local, free)  
+## Features
+
+### Chatbot Analysis
+- Users can paste any suspicious message (email, text, link).
+- The AI model analyzes the content and returns:
+  - **Judgment**: Safe, Phishing, or Other.
+  - **Explanation**: Why the content is suspicious or safe.
+  - **Tips**: Recommended user actions.
+
+### Dashboard Analytics
+- **Interactive Line Chart**: Daily analysis activity.
+- **Horizontal Bar Chart**: Monthly breakdown of analyses.
+- **Pie Chart**: Distribution of judgments (Safe vs. Phishing vs. Other).
+
+### User Management
+- JWT-based authentication and authorization.
+- Role-based access (User / Admin).
+- Secure password storage.
+
+### Backend Services
+- Analysis endpoint to process text and return AI results.
+- History endpoint for retrieving past analyses per user.
+- Stats endpoints to provide aggregated insights for dashboard charts.
+- Seeding script to generate realistic sample data.
+
+### Frontend Experience
+- Clean, responsive design with **shadcn/ui**.
+- Sidebar navigation with theme toggle and user avatar.
+- Real-time chatbot interface with message bubbles.
+- Loading states such as “Analyzing your message...” for better UX.
+
+### Security & Privacy
+- Authentication with JWT and cookie storage.
+- Role management for future admin capabilities.
+- Considerations for handling sensitive user data:
+  - Storing only minimal analysis metadata.
+  - Returning AI results without persisting personal input.
 
 ---
 
-## Core Features
-- Chat interface for phishing analysis  
-- Heuristic checks (keywords, suspicious URLs, spoofed senders)  
-- VirusTotal + Whois lookups  
-- Generative AI reasoning (explanations + safe handling tips)  
-- User authentication (JWT-based) and role management (user/admin)  
-- Admin dashboard for usage statistics  
+## Technologies Used
+
+### Backend
+- **FastAPI** – API framework
+- **SQLAlchemy** – ORM
+- **PostgreSQL / SQLite** – Database
+- **JWT (PyJWT)** – Authentication
+- **Uvicorn** – ASGI server
+
+### Frontend
+- **Next.js (React)** – Framework
+- **shadcn/ui + TailwindCSS** – UI components
+- **Recharts** – Interactive charts
+- **JWT-decode** – Token parsing
+
+### AI Integration
+- Generative AI API integration to classify and explain messages.
+- JSON-structured responses for judgments, explanations, and tips.
 
 ---
 
-## Privacy & Security
-- No storage of raw messages (only anonymized statistics).  
-- GDPR compliance (account deletion, data removal).  
-- Secure authentication with JWT + bcrypt.  
-- Countermeasures against prompt injection, SQL injection, and abuse (rate limiting).  
+## Deliverables Alignment
+
+According to project requirements:
+- **Innovation**: A focused phishing-detection chatbot with dashboards — niche but relevant in cybersecurity.
+- **Conception & Organization**: Implemented with modular architecture, backend/frontend separation, reusable components, and GitHub versioning.
+- **Realization & Technologies**: Fully functional backend (auth, analyze, history, stats endpoints) and frontend (dashboard, analyze, history, settings).
+- **Generative AI**: Integrated AI model/API for phishing detection.
+- **Data Privacy**: Minimal data storage, strong authentication, role management.
+- **Security**: JWT auth, role enums, protected routes, and basic threat considerations.
 
 ---
-
-## Setup & Run (Prototype)
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/your-username/ThreatIQ.git
-   cd ThreatIQ
