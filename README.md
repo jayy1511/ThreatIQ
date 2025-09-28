@@ -11,6 +11,13 @@ The platform combines:
 
 ---
 
+## Project Architecture
+The overall system design is illustrated below:
+
+![ThreatIQ Architecture](./ThreatIQ_Architecture.png)
+
+---
+
 ## Features
 
 ### Chatbot Analysis
@@ -54,17 +61,17 @@ The platform combines:
 ## Technologies Used
 
 ### Backend
-- **FastAPI** – API framework
-- **SQLAlchemy** – ORM
-- **PostgreSQL / SQLite** – Database
-- **JWT (PyJWT)** – Authentication
-- **Uvicorn** – ASGI server
+- **FastAPI** – API framework  
+- **SQLAlchemy** – ORM  
+- **PostgreSQL / SQLite** – Database  
+- **JWT (PyJWT)** – Authentication  
+- **Uvicorn** – ASGI server  
 
 ### Frontend
-- **Next.js (React)** – Framework
-- **shadcn/ui + TailwindCSS** – UI components
-- **Recharts** – Interactive charts
-- **JWT-decode** – Token parsing
+- **Next.js (React)** – Framework  
+- **shadcn/ui + TailwindCSS** – UI components  
+- **Recharts** – Interactive charts  
+- **JWT-decode** – Token parsing  
 
 ### AI Integration
 - Generative AI API integration to classify and explain messages.
@@ -73,13 +80,10 @@ The platform combines:
 ---
 
 ## Deliverables Alignment
-
 According to project requirements:
-- **Innovation**: A focused phishing-detection chatbot with dashboards — niche but relevant in cybersecurity.
-- **Conception & Organization**: Implemented with modular architecture, backend/frontend separation, reusable components, and GitHub versioning.
-- **Realization & Technologies**: Fully functional backend (auth, analyze, history, stats endpoints) and frontend (dashboard, analyze, history, settings).
-- **Generative AI**: Integrated AI model/API for phishing detection.
-- **Data Privacy**: Minimal data storage, strong authentication, role management.
-- **Security**: JWT auth, role enums, protected routes, and basic threat considerations.
-
----
+- **Innovation**: A focused phishing-detection chatbot with dashboards — niche but relevant in cybersecurity.  
+- **Conception & Organization**: Implemented with modular architecture, backend/frontend separation, reusable components, and GitHub versioning.  
+- **Realization & Technologies**: Fully functional backend (auth, analyze, history, stats endpoints) and frontend (dashboard, analyze, history, settings).  
+- **Generative AI**: Integrated AI model/API for phishing detection.  
+- **Data Privacy**: Minimal data storage, strong authentication, role management.  
+- **Security**: JWT auth, role enums, protected routes, and basic threat considerations.  
