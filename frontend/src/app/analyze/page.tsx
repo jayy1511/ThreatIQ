@@ -1,32 +1,44 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { useState } from "react";
 
-type Message = { sender: "user" | "bot"; text?: string; structured?: any };
+type StructuredResult = {
+  judgment: string;
+  explanation: string;
+  tips?: string[];
+};
+
+type Message = {
+  sender: "user" | "bot";
+  text?: string;
+  structured?: StructuredResult;
+};
 
 export default function AnalyzePage() {
+  const [mounted, setMounted] = useState(false);      // ← gate render to avoid hydration mismatch
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const userText = input; // capture current input
-    setInput(""); // clear input immediately
+    const userText = input;
+    setInput(""); // clear immediately
 
-    // Add user message
+    // add user message
     setMessages((prev) => [...prev, { sender: "user", text: userText }]);
 
-    // Add "analyzing..." placeholder
+    // add placeholder
     const placeholderIndex = messages.length + 1;
-    setMessages((prev) => [
-      ...prev,
-      { sender: "bot", text: "Analyzing your message..." },
-    ]);
+    setMessages((prev) => [...prev, { sender: "bot", text: "Analyzing your message..." }]);
 
     try {
       setLoading(true);
@@ -40,49 +52,51 @@ export default function AnalyzePage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         throw new Error(data?.detail || "Analysis failed");
       }
 
-      // Clean and parse AI result
-      let aiResult = data.ai_result || "";
+      // Clean & parse AI result
+      let aiResult: unknown = data.ai_result ?? "";
       if (typeof aiResult === "string") {
         aiResult = aiResult.replace(/```json/gi, "").replace(/```/g, "").trim();
       }
 
-      let parsed: any = null;
-      try {
-        parsed = typeof aiResult === "string" ? JSON.parse(aiResult) : aiResult;
-      } catch {
-        parsed = null;
+      let parsed: StructuredResult | null = null;
+      if (typeof aiResult === "string") {
+        try {
+          parsed = JSON.parse(aiResult);
+        } catch {
+          parsed = null;
+        }
+      } else if (aiResult && typeof aiResult === "object") {
+        parsed = aiResult as StructuredResult;
       }
 
-      // Replace placeholder with actual result
+      // replace placeholder
       setMessages((prev) =>
         prev.map((msg, idx) =>
           idx === placeholderIndex
             ? parsed
               ? { sender: "bot", structured: parsed }
-              : { sender: "bot", text: aiResult }
+              : { sender: "bot", text: typeof aiResult === "string" ? aiResult : "Could not parse AI response." }
             : msg
         )
       );
     } catch (err) {
       console.error("Error fetching analysis:", err);
-
-      // Replace placeholder with error
       setMessages((prev) =>
         prev.map((msg, idx) =>
-          idx === placeholderIndex
-            ? { sender: "bot", text: "Failed to fetch analysis." }
-            : msg
+          idx === placeholderIndex ? { sender: "bot", text: "Failed to fetch analysis." } : msg
         )
       );
     } finally {
       setLoading(false);
     }
   };
+
+  // Avoid SSR output to prevent hydration mismatch
+  if (!mounted) return null;
 
   return (
     <div className="flex flex-col h-screen">
@@ -91,9 +105,7 @@ export default function AnalyzePage() {
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            className={`flex ${
-              msg.sender === "user" ? "justify-end" : "justify-start"
-            }`}
+            className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
           >
             <Card
               className={`p-3 max-w-xl whitespace-pre-wrap ${
@@ -108,19 +120,18 @@ export default function AnalyzePage() {
                     <strong>Judgment:</strong> {msg.structured.judgment}
                   </p>
                   <p className="mt-2">
-                    <strong>Explanation:</strong>{" "}
-                    {msg.structured.explanation}
+                    <strong>Explanation:</strong> {msg.structured.explanation}
                   </p>
-                  {msg.structured.tips && (
+                  {Array.isArray(msg.structured.tips) && msg.structured.tips.length > 0 && (
                     <ul className="mt-2 list-disc pl-5">
-                      {msg.structured.tips.map((tip: string, i: number) => (
+                      {msg.structured.tips.map((tip, i) => (
                         <li key={i}>{tip}</li>
                       ))}
                     </ul>
                   )}
                 </div>
               ) : (
-                msg.text
+                msg.text || ""
               )}
             </Card>
           </div>
