@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { saveToken } from "@/lib/auth";
 import { API_BASE } from "@/lib/api";
 
 export default function SignupPage() {
@@ -15,23 +14,20 @@ export default function SignupPage() {
   const handleSignup = async () => {
     setError("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/auth/register", {
+      const res = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
-      if (!res.ok) throw new Error("Registration failed");
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || "Registration failed");
 
-      if (!data.access_token) throw new Error("No token received");
-      saveToken(data.access_token);
-
-      // Hard navigate so the cookie is present on the next request
-      window.location.href = "/dashboard";
+      // After successful signup, go to login (backend doesn't return a token here)
+      window.location.href = "/login";
     } catch (err: any) {
       console.error("Signup error:", err);
-      setError(err.message || "Failed to sign up");
+      setError(err?.message || "Failed to sign up");
     }
   };
 
@@ -55,7 +51,9 @@ export default function SignupPage() {
             onChange={(e) => setPassword(e.target.value)}
           />
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <Button className="w-full" onClick={handleSignup}>Create Account</Button>
+          <Button className="w-full" onClick={handleSignup}>
+            Create Account
+          </Button>
           <p className="text-sm text-center">
             Already have an account?{" "}
             <a href="/login" className="text-primary hover:underline">Login</a>
