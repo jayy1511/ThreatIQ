@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { saveToken } from "@/lib/auth";
+import { API_BASE } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function LoginPage() {
   const handleLogin = async () => {
     setError("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/auth/login", {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

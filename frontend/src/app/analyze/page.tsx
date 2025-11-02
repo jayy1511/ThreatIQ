@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { API_BASE } from "@/lib/api";
 
 type StructuredResult = {
   judgment: string;
@@ -42,7 +43,7 @@ export default function AnalyzePage() {
 
     try {
       setLoading(true);
-      const res = await fetch("http://127.0.0.1:8000/analyze/", {
+      const res = await fetch(`${API_BASE}/analyze/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -57,7 +58,7 @@ export default function AnalyzePage() {
       }
 
       // Clean & parse AI result
-      let aiResult: unknown = data.ai_result ?? "";
+      let aiResult: unknown = (data as any).ai_result ?? "";
       if (typeof aiResult === "string") {
         aiResult = aiResult.replace(/```json/gi, "").replace(/```/g, "").trim();
       }
