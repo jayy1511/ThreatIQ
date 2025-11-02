@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { saveToken } from "@/lib/auth";
+import { API_BASE } from "@/lib/api";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");

@@ -7,6 +7,7 @@ import { isLoggedIn, getToken } from "@/lib/auth"
 import { ChartLineInteractive } from "@/components/charts/ChartLineInteractive"
 import { ChartBarHorizontal } from "@/components/charts/ChartBarHorizontal"
 import { ChartPieLabel } from "@/components/charts/ChartPieLabel"
+import { API_BASE } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -23,21 +24,21 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         // Fetch history
-        const resHistory = await fetch("http://127.0.0.1:8000/analyze/history", {
+        const resHistory = await fetch(`${API_BASE}/analyze/history`, {
           headers: {
             Authorization: `Bearer ${getToken()}`,
           },
-        })
+        });
         if (!resHistory.ok) throw new Error("Failed to fetch history")
         const dataHistory = await resHistory.json()
         setHistory(dataHistory)
 
         // Fetch judgments (pie chart)
-        const resPie = await fetch("http://127.0.0.1:8000/stats/judgments", {
+        const resPie = await fetch(`${API_BASE}/stats/judgments`, {
           headers: {
             Authorization: `Bearer ${getToken()}`,
           },
-        })
+        });
         if (!resPie.ok) throw new Error("Failed to fetch judgments")
         const dataPie = await resPie.json()
         setPieData(dataPie)

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { clearToken, getToken } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { API_BASE } from "@/lib/api";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -20,8 +21,9 @@ export default function SettingsPage() {
 
     const fetchProfile = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/auth/me", {
+        const res = await fetch(`${API_BASE}/auth/me`, {
           headers: {
+            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
         });

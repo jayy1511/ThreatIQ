@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { isLoggedIn } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import { API_BASE } from "@/lib/api";
 
 interface AnalysisRecord {
   id: number;
@@ -30,8 +31,9 @@ export default function HistoryPage() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/analyze/history", {
+        const res = await fetch(`${API_BASE}/analyze/history`, {
           headers: {
+            "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
           },
         });
