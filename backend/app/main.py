@@ -4,26 +4,24 @@ from .routers import auth, analyze, stats
 
 app = FastAPI(title="ThreatIQ API")
 
-# CORS to allow Next.js frontend locally and on Vercel
 app.add_middleware(
     CORSMiddleware,
+    # Exact local dev origins
     allow_origins=[
-        "http://localhost:3000",    # local Next.js
-        "http://127.0.0.1:3000",    # local alias
-        "https://*.vercel.app",     # all Vercel preview URLs
-        # "https://YOURDOMAIN.com", # add if/when you attach a custom domain
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ],
-    allow_credentials=True,
+    # ✅ Allow any *.vercel.app preview/prod URL
+    allow_origin_regex=r"https://.*\.vercel\.app$",
+    allow_credentials=True,           # keep if you plan to use cookies; okay with regex
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routers
 app.include_router(auth.router)
 app.include_router(analyze.router)
 app.include_router(stats.router)
 
-# Health check endpoint
 @app.get("/health")
 def health():
     return {"status": "ok"}
