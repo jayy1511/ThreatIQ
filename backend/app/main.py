@@ -4,18 +4,13 @@ from .routers import auth, analyze, stats
 
 app = FastAPI(title="ThreatIQ API")
 
+# TEMP: permissive CORS to debug
 app.add_middleware(
     CORSMiddleware,
-    # Exact local dev origins
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    # ✅ Allow any *.vercel.app preview/prod URL
-    allow_origin_regex=r"https://.*\.vercel\.app$",
-    allow_credentials=True,           # keep if you plan to use cookies; okay with regex
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],          # open to all origins
+    allow_credentials=False,      # must be False when allow_origins=["*"]
+    allow_methods=["*"],          # allow POST/GET/OPTIONS/etc.
+    allow_headers=["*"],          # allow auth/content-type headers
 )
 
 app.include_router(auth.router)
