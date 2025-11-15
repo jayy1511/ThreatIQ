@@ -1,13 +1,13 @@
 import json
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from ..deps import get_current_user, get_db
+from ..deps import get_current_user
 from ..intel.heuristics import check_keywords, check_urls, check_grammar, check_sender
 from ..intel.whois_check import check_domain_age
 from ..intel.virustotal import check_url_virustotal
 from ..intel.llm import analyze_with_gemini
-from .. import models, schemas
+from ..mongo import analyses_collection, serialize_analysis
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -15,7 +15,6 @@ router = APIRouter(prefix="/analyze", tags=["analyze"])
 def analyze_message(
     payload: dict,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     text = payload.get("text")
     sender = payload.get("sender", "")
@@ -24,63 +23,56 @@ def analyze_message(
         raise HTTPException(status_code=400, detail="Missing text field")
 
     # --- Run heuristics ---
-    results = {}
+    results: dict = {}
     results.update(check_keywords(text))
     results.update(check_urls(text))
     results.update(check_grammar(text))
     results.update(check_sender(sender))
 
-    # --- Extra intelligence ---
-    vt_results = []
-    whois_results = []
-    for domain in results.get("domains", []):
-        whois_results.append(check_domain_age(domain))
-    for url in results.get("urls", []):
-        vt_results.append(check_url_virustotal(url))
-
-    results["virustotal"] = vt_results
-    results["whois"] = whois_results
+    # Domain / URL checks
+    results.update(check_domain_age(text))
+    results.update(check_url_virustotal(text))
 
     # --- AI analysis (Gemini) ---
     ai_result = analyze_with_gemini(text, results)
 
-    # --- Save in DB ---
-    analysis = models.Analysis(
-        user_id=current_user["sub"],
-        text=text,
-        sender=sender,
-        result=json.dumps({
+    # --- Save in MongoDB ---
+    doc = {
+        "user_id": current_user["sub"],
+        "text": text,
+        "sender": sender,
+        "result": {
             "analysis": results,
-            "ai_result": ai_result
-        })
-    )
-    db.add(analysis)
-    db.commit()
-    db.refresh(analysis)
+            "ai_result": ai_result,
+        },
+        "created_at": datetime.utcnow(),
+    }
+    insert_result = analyses_collection.insert_one(doc)
+    doc["_id"] = insert_result.inserted_id
+
+    saved_record = serialize_analysis(doc)
 
     return {
         "user": current_user,
         "analysis": results,
         "ai_result": ai_result,
         "saved_record": {
-            "id": analysis.id,
-            "created_at": analysis.created_at
-        }
+            "id": saved_record["id"],
+            "created_at": saved_record["created_at"],
+        },
     }
 
-@router.get("/history", response_model=list[schemas.AnalysisOut])
-def get_history(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    records = db.query(models.Analysis).filter(
-        models.Analysis.user_id == current_user["sub"]
-    ).all()
 
-    # Convert JSON string back to dict for response
-    for r in records:
-        try:
-            r.result = json.loads(r.result)
-        except:
-            r.result = {}
+@router.get("/history")
+def get_history(current_user: dict = Depends(get_current_user)):
+    """
+    Return history of analyses for the current user from MongoDB.
+    """
+    cursor = analyses_collection.find(
+        {"user_id": current_user["sub"]}
+    ).sort("created_at", -1)
+
+    records = [serialize_analysis(doc) for doc in cursor]
+
+    # result is already stored as dict, no need to json.loads
     return records

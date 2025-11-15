@@ -11,3 +11,6 @@ pydantic==2.8.2
 tldextract==5.1.2
 language-tool-python==2.7.1
 google-generativeai
+psycopg2-binary==2.9.9
+pymongo[srv]==4.10.1
+firebase-admin==6.5.0
