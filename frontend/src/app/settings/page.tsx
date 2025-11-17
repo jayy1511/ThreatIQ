@@ -2,40 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearToken, getToken } from "@/lib/auth";
+import { getToken, clearToken } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { API_BASE } from "@/lib/api";
+import { jwtDecode } from "jwt-decode";
+
+interface FirebaseToken {
+  email?: string;
+  user_id?: string;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<{ email: string; role: string } | null>(null);
-  const [error, setError] = useState("");
+  const [profile, setProfile] = useState<{ email: string; uid: string } | null>(
+    null
+  );
 
   useEffect(() => {
     const token = getToken();
+
     if (!token) {
       router.push("/login");
       return;
     }
 
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/auth/me`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) throw new Error("Failed to load profile");
-        const data = await res.json();
-        setProfile({ email: data.email, role: data.role });
-      } catch (err: any) {
-        setError(err.message);
-      }
-    };
-
-    fetchProfile();
+    try {
+      const decoded: FirebaseToken = jwtDecode(token);
+      setProfile({
+        email: decoded.email || "Unknown",
+        uid: decoded.user_id || "N/A",
+      });
+    } catch (e) {
+      console.error(e);
+      router.push("/login");
+    }
   }, [router]);
 
   const handleLogout = () => {
@@ -47,20 +47,23 @@ export default function SettingsPage() {
     <div className="p-6">
       <Card className="p-6 space-y-4 max-w-md">
         <h2 className="text-2xl font-bold">User Profile</h2>
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        {profile ? (
-          <div className="space-y-2">
-            <p><strong>Email:</strong> {profile.email}</p>
-            <p><strong>Role:</strong> {profile.role}</p>
-          </div>
-        ) : (
+
+        {!profile ? (
           <p>Loading...</p>
+        ) : (
+          <div className="space-y-2">
+            <p>
+              <strong>Email:</strong> {profile.email}
+            </p>
+            <p>
+              <strong>UID:</strong> {profile.uid}
+            </p>
+          </div>
         )}
-        <div className="flex gap-2">
-          <Button onClick={handleLogout} variant="destructive">
-            Logout
-          </Button>
-        </div>
+
+        <Button onClick={handleLogout} variant="destructive">
+          Logout
+        </Button>
       </Card>
     </div>
   );
