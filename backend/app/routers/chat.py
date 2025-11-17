@@ -9,7 +9,7 @@ from ..config import settings
 router = APIRouter(prefix="/security-chat", tags=["security-chat"])
 
 # Gemini model name
-MODEL_NAME = "gemini-2.0-flash"  # use the one that works with your key
+MODEL_NAME = "gemini-2.0-flash"
 
 # Configure Gemini once
 if settings.GEMINI_API_KEY:
@@ -35,6 +35,43 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+# ---------- Helper to clean Markdown / bullets ----------
+
+def _strip_markdown(text: str) -> str:
+    """
+    Strip the most common Markdown noise so the frontend sees plain text:
+    - **bold**, __bold__
+    - leading bullet markers (*, -, +)
+    - headings starting with '#'
+    """
+    lines: list[str] = []
+
+    for line in text.splitlines():
+        s = line.strip()
+
+        # Remove headings like "# Title", "## Tips"
+        while s.startswith("#"):
+            s = s.lstrip("#").strip()
+
+        # Remove bullet markers at start of line
+        for prefix in ("- ", "* ", "+ "):
+            if s.startswith(prefix):
+                s = s[len(prefix):].lstrip()
+                break
+
+        # Remove bold / italic markers
+        s = s.replace("**", "").replace("__", "")
+
+        # Strip surrounding single *…*
+        if s.startswith("*") and s.endswith("*") and len(s) > 2:
+            s = s[1:-1].strip()
+
+        if s:
+            lines.append(s)
+
+    return "\n".join(lines)
 
 
 @router.post("/", response_model=ChatResponse)
@@ -70,15 +107,31 @@ You have TWO modes:
    "is this safe?", "is this phishing?", or "can you check this message?",
    you MUST:
    - Start your answer with a clear judgment on one line:
-     "Judgment: Safe", "Judgment: Phishing", or "Judgment: Unclear".
+     Judgment: Safe
+     Judgment: Phishing
+     Judgment: Unclear
    - Then explain briefly why.
    - Then give 2–3 short, practical safety tips.
 
 2) For any other question about cybersecurity (passwords, Wi-Fi, scams,
    data privacy, etc.), answer like a normal assistant: be clear, concise,
    and practical.
-        
-Do NOT return JSON. Answer in normal text paragraphs.
+
+IF THE USER EXPLICITLY ASKS FOR A LIST (e.g. "list of do's and don'ts",
+"give me tips", "steps", "checklist"):
+- You MAY answer using a short numbered list like:
+  1. ...
+  2. ...
+  3. ...
+- Each item should be one short sentence.
+
+OUTPUT RULES (VERY IMPORTANT):
+- Answer in plain text only.
+- You MAY use numbered lists with "1.", "2.", "3." on separate lines.
+- Do NOT use Markdown bullets with '-' or '*'.
+- Do NOT use Markdown formatting like **bold**, __bold__, or headings (#).
+- Do NOT wrap the answer in JSON or code blocks.
+- Keep answers reasonably short and concrete.
 
 Conversation so far (if any):
 {history_text}
@@ -89,7 +142,8 @@ Current user message:
 
     try:
         response = _model.generate_content(prompt)
-        reply_text = response.text.strip()
-        return ChatResponse(reply=reply_text)
+        reply_text = (response.text or "").strip()
+        clean_text = _strip_markdown(reply_text)
+        return ChatResponse(reply=clean_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gemini error: {e}")
