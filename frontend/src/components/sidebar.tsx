@@ -14,12 +14,16 @@ export default function Sidebar() {
       {/* Top section */}
       <div>
         <h1 className="font-bold text-lg mb-6">ThreatIQ</h1>
+
         <nav className="space-y-2">
           <Button variant="ghost" asChild className="w-full justify-start">
             <Link href="/dashboard">Dashboard</Link>
           </Button>
           <Button variant="ghost" asChild className="w-full justify-start">
             <Link href="/analyze">Analyze</Link>
+          </Button>
+          <Button variant="ghost" asChild className="w-full justify-start">
+            <Link href="/chat">Security Chat</Link>
           </Button>
           <Button variant="ghost" asChild className="w-full justify-start">
             <Link href="/history">History</Link>
@@ -32,7 +36,7 @@ export default function Sidebar() {
 
       {/* Bottom section */}
       <div className="flex items-center justify-between mt-6 gap-2">
-        {/* Avatar with initial */}
+        {/* Avatar with initial (from email) */}
         <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-bold">
           {initial}
         </div>
