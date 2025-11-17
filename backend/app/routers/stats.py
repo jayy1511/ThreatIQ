@@ -7,7 +7,7 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 @router.get("/judgments")
 def get_judgment_breakdown(user=Depends(get_current_user)):
     docs = analyses_collection.find(
-        {"user_id": user["uid"]},    # FIXED
+        {"user_id": user["uid"]},  
         {"result": 1}
     )
 

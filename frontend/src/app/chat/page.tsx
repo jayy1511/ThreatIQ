@@ -49,7 +49,6 @@ export default function SecurityChatPage() {
     setInput("");
     setError(null);
 
-    // optimistic user message
     const newHistory: ChatTurn[] = [...chat, { role: "user", content: text }];
     setChat(newHistory);
 

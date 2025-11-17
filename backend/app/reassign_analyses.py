@@ -1,10 +1,3 @@
-# backend/app/reassign_analyses.py
-"""
-Reassign analyses from one user id to another.
-Run from project root:
-  python -m app.reassign_analyses
-"""
-
 from sqlalchemy import text
 from app.database import SessionLocal
 import sys
