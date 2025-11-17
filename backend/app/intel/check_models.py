@@ -1,5 +1,5 @@
 import google.generativeai as genai
-from app.config import settings  # adjust if your config import is different
+from app.config import settings
 
 def main():
     if not settings.GEMINI_API_KEY:

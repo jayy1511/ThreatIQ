@@ -25,10 +25,13 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex h-screen">
-            <Sidebar />
-            <main className="flex-1">{children}</main>
-          </div>
+          <div className="flex h-screen overflow-hidden">
+  <Sidebar />
+
+  <main className="flex-1 overflow-y-auto">
+    {children}
+  </main>
+</div>
         </ThemeProvider>
       </body>
     </html>

@@ -19,7 +19,7 @@ type Message = {
 };
 
 export default function AnalyzePage() {
-  const [mounted, setMounted] = useState(false);      // ← gate render to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

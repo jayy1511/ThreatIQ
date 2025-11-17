@@ -28,4 +28,4 @@ class AnalysisOut(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True   # Pydantic v2 replacement for orm_mode
+        from_attributes = True

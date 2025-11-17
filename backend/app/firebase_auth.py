@@ -2,10 +2,10 @@ import firebase_admin
 from firebase_admin import auth, credentials
 from fastapi import HTTPException, Header
 
-# Load Firebase key correctly
+# Load Firebase key
 cred = credentials.Certificate("firebase-admin-key.json")
 
-# Initialize Firebase app only once
+# Initialize Firebase app
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 
@@ -28,6 +28,6 @@ def get_current_user(authorization: str = Header(None)):
 
     try:
         decoded = auth.verify_id_token(token)
-        return decoded  # THIS IS A DICT
+        return decoded
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")

@@ -8,10 +8,8 @@ from ..config import settings
 
 router = APIRouter(prefix="/security-chat", tags=["security-chat"])
 
-# Gemini model name
 MODEL_NAME = "gemini-2.0-flash"
 
-# Configure Gemini once
 if settings.GEMINI_API_KEY:
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
