@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isLoggedIn } from "@/lib/auth";
+import { isLoggedIn, getToken } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import { API_BASE } from "@/lib/api";
 
 interface AnalysisRecord {
-  id: number;
   text: string;
   sender: string;
   result: any;
@@ -19,37 +19,32 @@ export default function HistoryPage() {
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [error, setError] = useState("");
 
-  // ✅ Protect route
+  // Protect route
   useEffect(() => {
-    if (!isLoggedIn()) {
-      router.push("/login");
-    }
+    if (!isLoggedIn()) router.push("/login");
   }, [router]);
 
-  // ✅ Fetch history
+  // Fetch history
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/analyze/history", {
+        const token = getToken();
+        const res = await fetch(`${API_BASE}/analyze/history`, {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
         if (!res.ok) throw new Error("Failed to fetch history");
 
         const data = await res.json();
-
-        // ✅ Reverse order so newest first
         setRecords(data.reverse());
       } catch (err: any) {
-        setError(err.message || "Something went wrong");
+        setError(err.message);
       }
     };
 
-    if (isLoggedIn()) {
-      fetchHistory();
-    }
+    if (isLoggedIn()) fetchHistory();
   }, []);
 
   return (
@@ -67,57 +62,50 @@ export default function HistoryPage() {
       )}
 
       <div className="grid gap-4">
-        {records.map((rec) => {
-          let ai = rec.result?.ai_result;
-          if (typeof ai === "string") {
-            try {
-              ai = JSON.parse(
-                ai.replace(/```json/g, "").replace(/```/g, "")
-              );
-            } catch {
-              ai = null;
-            }
-          }
+        {records.map((rec, index) => {
+          const ai = rec.result; // <<<<<<<<< FIXED (direct from backend)
 
           return (
-            <Card key={rec.id} className="p-4 space-y-2">
-              {/* ✅ Local time */}
+            <Card key={index} className="p-4 space-y-3">
+              {/* Timestamp */}
               <p className="text-sm text-muted-foreground">
-                {new Date(rec.created_at).toLocaleString(undefined, {
-                  dateStyle: "short",
-                  timeStyle: "medium",
-                })}
+                {new Date(rec.created_at).toLocaleString()}
               </p>
 
+              {/* Input message */}
               <p className="font-medium">Input: {rec.text}</p>
 
+              {/* AI Analysis */}
               {ai ? (
                 <div className="space-y-2">
                   <p>
-                    <span className="font-bold">Judgment:</span>{" "}
+                    <strong>Judgment:</strong>{" "}
                     <span
                       className={
                         ai.judgment === "Phishing"
                           ? "text-red-500"
-                          : "text-green-500"
+                          : ai.judgment === "Safe"
+                          ? "text-green-500"
+                          : "text-yellow-500"
                       }
                     >
                       {ai.judgment}
                     </span>
                   </p>
+
                   <p>
-                    <span className="font-bold">Explanation:</span>{" "}
-                    {ai.explanation}
+                    <strong>Explanation:</strong> {ai.explanation}
                   </p>
+
                   {ai.tips && (
-                    <div>
+                    <>
                       <p className="font-bold">Tips:</p>
                       <ul className="list-disc pl-6 text-sm">
                         {ai.tips.map((tip: string, idx: number) => (
                           <li key={idx}>{tip}</li>
                         ))}
                       </ul>
-                    </div>
+                    </>
                   )}
                 </div>
               ) : (

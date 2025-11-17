@@ -1,86 +1,116 @@
-import json
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from typing import Any, Dict, List, Optional
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+import google.generativeai as genai
+from datetime import datetime
 
-from ..deps import get_current_user, get_db
-from ..intel.heuristics import check_keywords, check_urls, check_grammar, check_sender
-from ..intel.whois_check import check_domain_age
-from ..intel.virustotal import check_url_virustotal
-from ..intel.llm import analyze_with_gemini
-from .. import models, schemas
+from ..config import settings
+from ..mongo import analyses_collection
+from ..firebase_auth import get_current_user
 
-router = APIRouter(prefix="/analyze", tags=["analyze"])
+router = APIRouter(
+    prefix="/analyze",
+    tags=["analyze"],
+)
 
-@router.post("/")
-def analyze_message(
-    payload: dict,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    text = payload.get("text")
-    sender = payload.get("sender", "")
+# Gemini
+MODEL_NAME = "gemini-2.0-flash"
+if settings.GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        _model = genai.GenerativeModel(MODEL_NAME)
+    except:
+        _model = None
+else:
+    _model = None
 
-    if not text:
-        raise HTTPException(status_code=400, detail="Missing text field")
+class AnalyzeRequest(BaseModel):
+    text: str
+    sender: Optional[str] = None
 
-    # --- Run heuristics ---
-    results = {}
-    results.update(check_keywords(text))
-    results.update(check_urls(text))
-    results.update(check_grammar(text))
-    results.update(check_sender(sender))
+class AnalyzeResponse(BaseModel):
+    text: str
+    ai_result: Dict[str, Any]
 
-    # --- Extra intelligence ---
-    vt_results = []
-    whois_results = []
-    for domain in results.get("domains", []):
-        whois_results.append(check_domain_age(domain))
-    for url in results.get("urls", []):
-        vt_results.append(check_url_virustotal(url))
-
-    results["virustotal"] = vt_results
-    results["whois"] = whois_results
-
-    # --- AI analysis (Gemini) ---
-    ai_result = analyze_with_gemini(text, results)
-
-    # --- Save in DB ---
-    analysis = models.Analysis(
-        user_id=current_user["sub"],
-        text=text,
-        sender=sender,
-        result=json.dumps({
-            "analysis": results,
-            "ai_result": ai_result
-        })
-    )
-    db.add(analysis)
-    db.commit()
-    db.refresh(analysis)
-
+def _fallback_result(reason: str) -> Dict[str, Any]:
     return {
-        "user": current_user,
-        "analysis": results,
-        "ai_result": ai_result,
-        "saved_record": {
-            "id": analysis.id,
-            "created_at": analysis.created_at
-        }
+        "judgment": "Unclear",
+        "explanation": reason,
+        "tips": [
+            "Double-check the sender address.",
+            "Avoid clicking unknown links."
+        ],
     }
 
-@router.get("/history", response_model=list[schemas.AnalysisOut])
-def get_history(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    records = db.query(models.Analysis).filter(
-        models.Analysis.user_id == current_user["sub"]
-    ).all()
+def _call_gemini_for_analysis(text: str) -> Dict[str, Any]:
+    if _model is None:
+        return _fallback_result("Gemini API key missing.")
 
-    # Convert JSON string back to dict for response
-    for r in records:
-        try:
-            r.result = json.loads(r.result)
-        except:
-            r.result = {}
-    return records
+    prompt = f"""
+Analyze this message:
+
+\"\"\"{text}\"\"\"
+
+Return EXACTLY:
+
+Judgment: Safe / Phishing / Unclear
+Explanation: <text>
+Tips:
+- tip1
+- tip2
+"""
+
+    try:
+        raw = _model.generate_content(prompt).text.strip()
+    except Exception as e:
+        return _fallback_result(f"Gemini error: {e}")
+
+    lines = [x.strip() for x in raw.splitlines() if x.strip()]
+    judgment = "Unclear"
+    explanation = ""
+    tips: List[str] = []
+
+    for line in lines:
+        low = line.lower()
+        if low.startswith("judgment:"):
+            judgment = line.split(":", 1)[1].strip().capitalize()
+        elif low.startswith("explanation:"):
+            explanation = line.split(":", 1)[1].strip()
+        elif line.startswith("-") or line.startswith("•"):
+            tips.append(line.lstrip("-•").strip())
+
+    if not explanation:
+        explanation = raw
+    if not tips:
+        tips = ["Verify sender address", "Avoid unknown links"]
+
+    return {
+        "judgment": judgment,
+        "explanation": explanation,
+        "tips": tips,
+    }
+
+@router.post("/", response_model=AnalyzeResponse)
+def analyze_message(body: AnalyzeRequest, user=Depends(get_current_user)):
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    ai_result = _call_gemini_for_analysis(body.text)
+
+    analyses_collection.insert_one({
+        "user_id": user["uid"],   # FIXED
+        "text": body.text,
+        "sender": body.sender or "",
+        "result": ai_result,
+        "created_at": datetime.utcnow(),
+    })
+
+    return AnalyzeResponse(text=body.text, ai_result=ai_result)
+
+@router.get("/history")
+def get_history(user=Depends(get_current_user)):
+    docs = analyses_collection.find(
+        {"user_id": user["uid"]},   # FIXED
+        {"_id": 0}
+    )
+    return list(docs)

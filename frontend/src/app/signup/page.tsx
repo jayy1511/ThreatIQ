@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { saveToken } from "@/lib/auth";
+import { saveToken, saveUser } from "@/lib/auth";
+import { auth } from "@/lib/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -14,50 +16,51 @@ export default function SignupPage() {
   const handleSignup = async () => {
     setError("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      const idToken = await cred.user.getIdToken();
 
-      if (!res.ok) throw new Error("Registration failed");
-      const data = await res.json();
+      if (!idToken) throw new Error("No token received from Firebase");
 
-      if (!data.access_token) throw new Error("No token received");
-      saveToken(data.access_token);
+      saveToken(idToken);
+      saveUser(email);
 
-      // Hard navigate so the cookie is present on the next request
+      // force full reload so middleware sees the cookie
       window.location.href = "/dashboard";
     } catch (err: any) {
-      console.error("Signup error:", err);
-      setError(err.message || "Failed to sign up");
+      setError(err.message || "Registration failed");
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-      <Card className="w-[350px]">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Sign Up</CardTitle>
+          <CardTitle className="text-2xl font-semibold text-center">
+            Create your ThreatIQ account
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
+            placeholder="Email"
             type="email"
-            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <Input
-            type="password"
             placeholder="Password"
+            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <Button className="w-full" onClick={handleSignup}>Create Account</Button>
-          <p className="text-sm text-center">
+          <Button className="w-full" onClick={handleSignup}>
+            Create Account
+          </Button>
+          <p className="text-sm text-center mt-2">
             Already have an account?{" "}
-            <a href="/login" className="text-primary hover:underline">Login</a>
+            <a href="/login" className="text-primary hover:underline">
+              Login
+            </a>
           </p>
         </CardContent>
       </Card>
