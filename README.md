@@ -74,6 +74,7 @@ The overall system design is illustrated below:
 - **Recharts** – Interactive charts   
 
 ### AI Integration
+- Google ADK
 - Gemini AI API integration to classify and explain messages.
 - JSON-structured responses for judgments, explanations, and tips.
 
