@@ -1,4 +1,4 @@
-# ThreatIQ – AI-Powered Phishing Detection Chatbot
+# ThreatIQ – AI-Powered Phishing Detection
 
 ## Project Overview
 ThreatIQ is a prototype application that uses generative AI to analyze messages and detect potential phishing attempts. The system provides real-time analysis, user-friendly dashboards, and clear security insights. It is designed as part of the EPITA Bachelor 4th semester project on *Generative AIs & Chatbots*. It will soon be upgraded to a helpful AI Agent.
