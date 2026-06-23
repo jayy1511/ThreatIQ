@@ -39,7 +39,7 @@ async def connect_gmail(user_data: dict = Depends(verify_firebase_token)):
     try:
         user_id = user_data.get('uid')
         
-        auth_data = gmail_oauth_service.build_auth_url(user_id)
+        auth_data = await gmail_oauth_service.build_auth_url(user_id)
         
         logger.info(f"Generated Gmail auth URL for user: {user_id}")
         

@@ -7,6 +7,7 @@ Handles OAuth URL generation, token exchange, refresh, and storage.
 import logging
 import secrets
 import time
+from datetime import datetime, timedelta
 from typing import Optional, Dict
 from urllib.parse import urlencode
 import httpx
@@ -48,19 +49,43 @@ class GmailOAuthService:
         self.redirect_uri = settings.google_redirect_uri
         logger.info("GmailOAuthService initialized")
     
-    def build_auth_url(self, user_id: str) -> Dict[str, str]:
+    # OAuth state lifetime in seconds (10 minutes)
+    OAUTH_STATE_TTL_SECONDS = 600
+    
+    async def build_auth_url(self, user_id: str) -> Dict[str, str]:
         """
-        Build OAuth authorization URL with state parameter.
+        Build OAuth authorization URL with secure server-side state.
         
-        State parameter binds the request to the user's Firebase UID for CSRF protection.
+        Generates a cryptographically random state token and stores it
+        server-side in MongoDB bound to the user_id, with an expiration.
+        The state sent to Google is an opaque token — user_id is never
+        embedded in the URL.
         
         Args:
             user_id: Firebase user ID
             
         Returns:
             Dict with 'url' and 'state'
+            
+        Raises:
+            GmailOAuthError: If state cannot be persisted
         """
         state = secrets.token_urlsafe(32)
+        
+        now = datetime.utcnow()
+        expires_at = now + timedelta(seconds=self.OAUTH_STATE_TTL_SECONDS)
+        
+        try:
+            db = Database.get_db()
+            await db.oauth_states.insert_one({
+                "state": state,
+                "user_id": user_id,
+                "created_at": now,
+                "expires_at": expires_at,
+            })
+        except Exception as e:
+            logger.error("Failed to persist OAuth state", exc_info=True)
+            raise GmailOAuthError("Failed to initiate Gmail authorization") from e
         
         params = {
             "client_id": self.client_id,
@@ -69,7 +94,7 @@ class GmailOAuthService:
             "scope": " ".join(self.SCOPES),
             "access_type": "offline",
             "prompt": "consent",
-            "state": f"{user_id}:{state}",
+            "state": state,
         }
         
         url = f"{self.OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
@@ -77,25 +102,70 @@ class GmailOAuthService:
         
         return {"url": url, "state": state}
     
+    async def _validate_and_consume_state(self, state: str) -> str:
+        """
+        Validate an OAuth state token and consume it atomically.
+        
+        Looks up the state in MongoDB, verifies it has not expired,
+        and deletes it in a single atomic operation to prevent replay.
+        
+        Args:
+            state: Opaque state token from the OAuth callback
+            
+        Returns:
+            The user_id bound to this state
+            
+        Raises:
+            GmailOAuthError: If state is invalid, expired, or already consumed
+        """
+        if not state or len(state) < 16:
+            raise GmailOAuthError("Invalid OAuth callback request")
+        
+        db = Database.get_db()
+        
+        # Atomically find and delete the state document to prevent replay
+        state_doc = await db.oauth_states.find_one_and_delete(
+            {"state": state}
+        )
+        
+        if not state_doc:
+            logger.warning("OAuth state not found or already consumed")
+            raise GmailOAuthError("Invalid OAuth callback request")
+        
+        # Verify the state has not expired (belt-and-suspenders; TTL index also cleans up)
+        if datetime.utcnow() > state_doc["expires_at"]:
+            logger.warning("OAuth state expired")
+            raise GmailOAuthError("Authorization request expired, please try again")
+        
+        user_id = state_doc.get("user_id")
+        if not user_id:
+            logger.error("OAuth state document missing user_id")
+            raise GmailOAuthError("Invalid OAuth callback request")
+        
+        return user_id
+    
     async def exchange_code_for_tokens(self, code: str, state: str) -> Dict[str, str]:
         """
-        Exchange authorization code for access and refresh tokens.
+        Validate state, then exchange authorization code for tokens.
+        
+        State is validated and consumed BEFORE the code is exchanged with
+        Google, preventing CSRF and account-linking attacks.
         
         Args:
             code: Authorization code from OAuth callback
-            state: State parameter from OAuth callback (format: "user_id:random_state")
+            state: Opaque state token from OAuth callback
             
         Returns:
-            Dict with tokens and user_id
+            Dict with user_id and email
             
         Raises:
-            GmailOAuthError: If token exchange fails
+            GmailOAuthError: If state validation or token exchange fails
         """
+        # --- Step 1: Validate and consume state BEFORE touching the code ---
+        user_id = await self._validate_and_consume_state(state)
+        
+        # --- Step 2: Exchange code for tokens ---
         try:
-            user_id = state.split(":")[0] if ":" in state else None
-            if not user_id:
-                raise GmailOAuthError("Invalid state parameter")
-            
             data = {
                 "code": code,
                 "client_id": self.client_id,
@@ -108,8 +178,8 @@ class GmailOAuthService:
                 response = await client.post(self.OAUTH_TOKEN_URL, data=data)
                 
                 if response.status_code != 200:
-                    logger.error(f"Token exchange failed: {response.text}")
-                    raise GmailOAuthError(f"Token exchange failed: {response.status_code}")
+                    logger.error(f"Token exchange failed with status {response.status_code}")
+                    raise GmailOAuthError("Token exchange with Google failed")
                 
                 token_data = response.json()
                 
@@ -123,7 +193,7 @@ class GmailOAuthService:
         except GmailOAuthError:
             raise
         except Exception as e:
-            logger.error(f"Error exchanging code for tokens: {e}", exc_info=True)
+            logger.error("Error exchanging code for tokens", exc_info=True)
             raise GmailOAuthError("Failed to exchange authorization code") from e
     
     async def _get_user_email(self, access_token: str) -> str:
