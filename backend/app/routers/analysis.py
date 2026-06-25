@@ -35,12 +35,18 @@ async def call_analysis_service_with_retry(
     Call the analysis-service with retry logic for Render cold starts.
     
     Implements exponential backoff for 502/503/504 errors and timeouts.
+    Sends X-Internal-Service-Key header for internal authentication.
     """
     payload = {
         "message": message,
         "user_guess": user_guess,
         "learning_context": learning_context
     }
+    
+    # Build internal service auth headers
+    headers = {"Content-Type": "application/json"}
+    if settings.analysis_service_api_key:
+        headers["X-Internal-Service-Key"] = settings.analysis_service_api_key
     
     last_error = None
     
@@ -51,7 +57,8 @@ async def call_analysis_service_with_retry(
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
                 response = await client.post(
                     f"{settings.analysis_service_url}/analyze",
-                    json=payload
+                    json=payload,
+                    headers=headers,
                 )
                 
                 # Success

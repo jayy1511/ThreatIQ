@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     
     # Microservices
     analysis_service_url: str = "http://localhost:8010"
+    analysis_service_api_key: str = ""
     
     environment: str = "development"
     
