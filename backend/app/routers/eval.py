@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.routers.auth import verify_firebase_token
+from app.routers.auth import verify_admin_user
 from app.models.database import Database
 from app.llm.gemini_client import get_gemini_client
 from datetime import datetime
@@ -42,13 +42,12 @@ Be concise but precise in your comments.
 @router.post("/admin/eval-sample")
 async def evaluate_sample(
     limit: int = Query(5, ge=1, le=20),
-    user_data: dict = Depends(verify_firebase_token),
+    user_data: dict = Depends(verify_admin_user),
 ):
     """
     Run evaluation agent on a small sample of recent interactions.
 
-    NOTE: For demo purposes, this endpoint is available to any authenticated user.
-    In production, you'd restrict this to admins only.
+    Admin-only: requires the ``admin`` Firebase custom claim.
     """
     try:
         db = Database.get_db()
@@ -152,5 +151,5 @@ async def evaluate_sample(
         logger.error(f"Error running evaluation: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to run evaluation: {str(e)}",
+            detail="Failed to run evaluation",
         )

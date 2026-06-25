@@ -66,6 +66,28 @@ async def verify_firebase_token(authorization: Optional[str] = Header(None)) -> 
         raise HTTPException(status_code=401, detail="Token verification failed")
 
 
+async def verify_admin_user(user_data: dict = Depends(verify_firebase_token)) -> dict:
+    """
+    Verify that the authenticated user has admin privileges.
+
+    Checks for the ``admin`` custom claim set via the Firebase Admin SDK
+    (``auth.set_custom_user_claims(uid, {"admin": True})``).
+
+    Returns:
+        Decoded token data (same shape as verify_firebase_token)
+
+    Raises:
+        HTTPException 403: If the user is authenticated but not an admin
+    """
+    # Firebase custom claims are merged into the decoded token dict
+    if not user_data.get("admin", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions",
+        )
+    return user_data
+
+
 @router.post("/verify-token")
 async def verify_token_endpoint(user_data: dict = Depends(verify_firebase_token)):
     """

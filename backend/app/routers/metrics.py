@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from app.routers.auth import verify_firebase_token
+from app.routers.auth import verify_admin_user
 from app.models.database import Database
 import logging
 
@@ -9,9 +9,11 @@ router = APIRouter()
 
 
 @router.get("/metrics")
-async def get_metrics(user_data: dict = Depends(verify_firebase_token)):
+async def get_metrics(user_data: dict = Depends(verify_admin_user)):
     """
     Basic system metrics for observability.
+
+    Admin-only: requires the ``admin`` Firebase custom claim.
 
     Returned fields (example):
     - total_users: how many user profiles exist
@@ -57,5 +59,5 @@ async def get_metrics(user_data: dict = Depends(verify_firebase_token)):
         logger.error(f"Error computing metrics: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to compute metrics: {str(e)}",
+            detail="Failed to compute metrics",
         )
