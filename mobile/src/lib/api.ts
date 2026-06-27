@@ -6,9 +6,13 @@ import { API_BASE_URL } from './config';
 // Types
 // ============================================
 
+// Must stay aligned with backend schemas
+export type UserGuess = 'phishing' | 'safe' | 'unclear';
+export const MAX_MESSAGE_LENGTH = 12_000;
+
 export interface AnalysisRequest {
     message: string;
-    user_guess?: string;
+    user_guess?: UserGuess;
     user_id?: string;
 }
 
