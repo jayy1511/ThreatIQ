@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -97,7 +97,7 @@ export default function AnalyzePage() {
         // Do NOT fallback for 500 errors - those indicate real problems
         if (status === 401 || status === 403) {
           console.warn('Auth error, falling back to public endpoint:', err);
-          data = await analyzePublicMessage(message, guessToSend, user.uid);
+          data = await analyzePublicMessage(message, guessToSend);
         } else if (status === 429) {
           setError('Quota gratuite atteinte. Réessaie plus tard ou utilise une autre clé API.');
           return;

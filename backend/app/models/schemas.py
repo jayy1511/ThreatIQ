@@ -4,11 +4,21 @@ from datetime import datetime
 
 
 class AnalysisRequest(BaseModel):
-    """Request model for phishing analysis."""
+    """Request model for authenticated phishing analysis."""
     message: str = Field(..., min_length=1, description="Email or message to analyze")
     user_guess: Optional[str] = Field(None, description="User's prediction: phishing, safe, or unclear")
     user_id: str = Field(..., description="Firebase UID")
     request_id: Optional[str] = Field(None, description="Optional request ID for idempotency or tracking")
+
+
+class PublicAnalysisRequest(BaseModel):
+    """Request model for public (unauthenticated) phishing analysis.
+
+    Does not accept user_id or request_id because public analysis
+    is not saved to any user's profile or history.
+    """
+    message: str = Field(..., min_length=1, description="Email or message to analyze")
+    user_guess: Optional[str] = Field(None, description="User's prediction: phishing, safe, or unclear")
 
 
 class ClassificationResult(BaseModel):

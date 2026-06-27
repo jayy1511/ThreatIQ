@@ -51,15 +51,11 @@ export const analyzeMessage = async (
 
 export const analyzePublicMessage = async (
   message: string,
-  userGuess: string,
-  userId: string
+  userGuess: string
 ) => {
-  const requestId = generateUUID();
   const response = await api.post("/api/analyze-public", {
     message,
     user_guess: userGuess,
-    user_id: userId,
-    request_id: requestId,
   });
   return response.data;
 };

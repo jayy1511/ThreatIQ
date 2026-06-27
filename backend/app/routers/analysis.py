@@ -8,7 +8,7 @@ This router handles:
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.schemas import AnalysisRequest, AnalysisResponse
+from app.models.schemas import AnalysisRequest, PublicAnalysisRequest, AnalysisResponse
 from app.routers.auth import verify_firebase_token
 from app.config import settings
 import httpx
@@ -237,14 +237,17 @@ async def analyze_message(
         raise
     except Exception as e:
         logger.error(f"Error in analysis endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed")
 
 
 @router.post("/analyze-public")
-async def analyze_message_public(request: AnalysisRequest):
+async def analyze_message_public(request: PublicAnalysisRequest):
     """
     Public analysis endpoint (no auth required) for testing.
     Limited functionality - doesn't save to user profile.
+    
+    Accepts only message and optional user_guess.
+    Does not accept user_id or request_id.
     """
     try:
         logger.info("Public analysis request (no auth)")
@@ -266,4 +269,4 @@ async def analyze_message_public(request: AnalysisRequest):
         raise
     except Exception as e:
         logger.error(f"Error in public analysis endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed")
