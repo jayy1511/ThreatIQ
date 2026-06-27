@@ -250,35 +250,38 @@ export default function AnalyzeScreen() {
                     {/* Explanation */}
                     <Card>
                         <Text style={styles.sectionTitle}>📋 Analysis Details</Text>
-                        <Text style={styles.explanationText}>{result.explanation}</Text>
+                        <Text style={styles.explanationText}>{result.classification.explanation}</Text>
                     </Card>
 
                     {/* AI Coach Response */}
                     {result.coach_response && (
                         <Card variant="accent">
                             <Text style={styles.sectionTitle}>🎓 AI Coach Says</Text>
-                            <Text style={styles.coachText}>{result.coach_response}</Text>
+                            <Text style={styles.coachText}>
+                                {result.coach_response.verdict}{'\n\n'}
+                                {result.coach_response.explanation}
+                            </Text>
                         </Card>
                     )}
 
                     {/* Similar Examples */}
-                    {result.similar_examples?.length > 0 && (
+                    {result.coach_response?.similar_examples?.length > 0 && (
                         <Card>
                             <Text style={styles.sectionTitle}>📚 Similar Examples</Text>
-                            {result.similar_examples.slice(0, 3).map((example, i) => (
+                            {result.coach_response.similar_examples.slice(0, 3).map((example, i) => (
                                 <View key={i} style={styles.exampleItem}>
                                     <View style={styles.exampleHeader}>
                                         <Tag
-                                            label={example.label}
-                                            variant={getLabelVariant(example.label)}
+                                            label={example.category}
+                                            variant={getLabelVariant(example.category)}
                                             size="sm"
                                         />
                                         <Text style={styles.similarityText}>
-                                            {Math.round(example.similarity * 100)}% match
+                                            {Math.round((example.similarity || 0) * 100)}% match
                                         </Text>
                                     </View>
                                     <Text style={styles.exampleText} numberOfLines={2}>
-                                        {example.text}
+                                        {example.message}
                                     </Text>
                                 </View>
                             ))}

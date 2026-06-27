@@ -20,17 +20,33 @@ export interface ClassificationResult {
     label: 'phishing' | 'suspicious' | 'safe';
     confidence: number;
     reason_tags: string[];
+    explanation: string;
+}
+
+export interface PhishingExample {
+    message: string;
+    category: string;
+    similarity?: number;
+    description?: string;
+}
+
+export interface QuizQuestion {
+    question: string;
+    options: string[];
+    correct_answer: string;
+}
+
+export interface CoachResponse {
+    verdict: string;
+    explanation: string;
+    similar_examples: PhishingExample[];
+    tips: string[];
+    quiz?: QuizQuestion;
 }
 
 export interface AnalysisResponse {
     classification: ClassificationResult;
-    explanation: string;
-    similar_examples: Array<{
-        text: string;
-        label: string;
-        similarity: number;
-    }>;
-    coach_response: string;
+    coach_response: CoachResponse;
     session_id: string;
     category?: string;
     was_correct?: boolean;
