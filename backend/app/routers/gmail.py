@@ -5,9 +5,10 @@ Provides OAuth connection, status, triage, and history endpoints.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from app.routers.auth import verify_firebase_token
+from app.core.rate_limit import check_rate_limit
 from app.services.gmail_oauth import gmail_oauth_service, GmailOAuthError
 from app.services.gmail_triage import gmail_triage_service, GmailTriageError
 from app.models.schemas import (
@@ -140,6 +141,7 @@ async def disconnect_gmail(user_data: dict = Depends(verify_firebase_token)):
 
 @router.post("/gmail/triage", response_model=GmailTriageResponse)
 async def triage_inbox(
+    http_request: Request,
     request: GmailTriageRequest,
     user_data: dict = Depends(verify_firebase_token)
 ):
@@ -157,6 +159,14 @@ async def triage_inbox(
     """
     try:
         user_id = user_data.get('uid')
+        
+        # Rate limit by authenticated user
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_gmail_triage,
+            window_seconds=settings.rate_limit_gmail_triage_window,
+            user_id=user_id,
+        )
         
         logger.info(f"Starting inbox triage for user {user_id}")
         

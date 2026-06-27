@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from app.routers.auth import verify_admin_user
+from app.core.rate_limit import check_rate_limit
+from app.config import settings
 from app.models.database import Database
 import logging
 
@@ -9,7 +11,10 @@ router = APIRouter()
 
 
 @router.get("/metrics")
-async def get_metrics(user_data: dict = Depends(verify_admin_user)):
+async def get_metrics(
+    http_request: Request,
+    user_data: dict = Depends(verify_admin_user),
+):
     """
     Basic system metrics for observability.
 
@@ -22,6 +27,14 @@ async def get_metrics(user_data: dict = Depends(verify_admin_user)):
     - avg_accuracy: average user accuracy across all profiles
     """
     try:
+        # Rate limit by admin user
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_admin,
+            window_seconds=settings.rate_limit_admin_window,
+            user_id=user_data.get('uid'),
+        )
+        
         db = Database.get_db()
 
         total_users = await db.user_profiles.count_documents({})

@@ -7,9 +7,10 @@ This router handles:
 - /api/analysis-service/health - Health proxy for mobile cold-start detection
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from app.models.schemas import AnalysisRequest, PublicAnalysisRequest, AnalysisResponse
 from app.routers.auth import verify_firebase_token
+from app.core.rate_limit import check_rate_limit
 from app.config import settings
 import httpx
 import logging
@@ -170,6 +171,7 @@ async def analysis_service_health():
 
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_message(
+    http_request: Request,
     request: AnalysisRequest,
     user_data: dict = Depends(verify_firebase_token)
 ):
@@ -188,6 +190,14 @@ async def analyze_message(
         
         if request.user_id != user_data.get('uid'):
             raise HTTPException(status_code=403, detail="User ID mismatch")
+        
+        # Rate limit by authenticated user
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_analysis,
+            window_seconds=settings.rate_limit_analysis_window,
+            user_id=request.user_id,
+        )
         
         # Get learning context from memory agent
         from app.agents.memory import memory_agent
@@ -241,7 +251,7 @@ async def analyze_message(
 
 
 @router.post("/analyze-public")
-async def analyze_message_public(request: PublicAnalysisRequest):
+async def analyze_message_public(http_request: Request, request: PublicAnalysisRequest):
     """
     Public analysis endpoint (no auth required) for testing.
     Limited functionality - doesn't save to user profile.
@@ -250,6 +260,13 @@ async def analyze_message_public(request: PublicAnalysisRequest):
     Does not accept user_id or request_id.
     """
     try:
+        # Rate limit by IP (no auth)
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_public,
+            window_seconds=settings.rate_limit_public_window,
+        )
+        
         logger.info("Public analysis request (no auth)")
         
         # Call analysis service with retry (no learning context)

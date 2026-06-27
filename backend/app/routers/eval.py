@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.routers.auth import verify_admin_user
+from app.core.rate_limit import check_rate_limit
+from app.config import settings
 from app.models.database import Database
 from app.llm.gemini_client import get_gemini_client
 from datetime import datetime
@@ -41,6 +43,7 @@ Be concise but precise in your comments.
 
 @router.post("/admin/eval-sample")
 async def evaluate_sample(
+    http_request: Request,
     limit: int = Query(5, ge=1, le=20),
     user_data: dict = Depends(verify_admin_user),
 ):
@@ -50,6 +53,14 @@ async def evaluate_sample(
     Admin-only: requires the ``admin`` Firebase custom claim.
     """
     try:
+        # Rate limit by admin user
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_admin,
+            window_seconds=settings.rate_limit_admin_window,
+            user_id=user_data.get('uid'),
+        )
+        
         db = Database.get_db()
 
         cursor = (

@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     analysis_service_url: str = "http://localhost:8010"
     analysis_service_api_key: str = ""
     
+    # Rate limiting (requests per window)
+    # Format: max requests / window in seconds
+    rate_limit_analysis: int = 20           # authenticated analysis per user
+    rate_limit_analysis_window: int = 60    # window in seconds
+    rate_limit_public: int = 10             # public analysis per IP
+    rate_limit_public_window: int = 60
+    rate_limit_gmail_triage: int = 5        # Gmail triage per user
+    rate_limit_gmail_triage_window: int = 60
+    rate_limit_admin: int = 10              # admin/eval/metrics per user
+    rate_limit_admin_window: int = 60
+    
     environment: str = "development"
     
     @property
