@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.routers.auth import verify_admin_user
 from app.core.rate_limit import check_rate_limit
+from app.core.redact import redact_sensitive_info
 from app.config import settings
 from app.models.database import Database
 from app.llm.gemini_client import get_gemini_client
@@ -80,10 +81,13 @@ async def evaluate_sample(
         interactions = []
         async for doc in cursor:
             clf = doc.get("classification", {}) or {}
+            raw_msg = doc.get("message", "")
+            redacted_msg = redact_sensitive_info(raw_msg)
+            
             interactions.append(
                 {
                     "interaction_id": str(doc["_id"]),
-                    "message": doc.get("message", ""),
+                    "message": redacted_msg,
                     "system_label": clf.get("label", "unknown"),
                     "system_confidence": float(clf.get("confidence", 0.0)),
                     "timestamp": doc.get("timestamp"),
