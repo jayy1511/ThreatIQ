@@ -242,7 +242,15 @@ async def update_user_profile(user_id: str, category: str, was_correct: Optional
         return profile
 
 
-async def log_interaction(user_id: str, message: str, classification: Dict, was_correct: Optional[bool], session_id: str, request_id: str) -> bool:
+async def log_interaction(
+    user_id: str, 
+    message: str, 
+    classification: Dict, 
+    was_correct: Optional[bool], 
+    session_id: str, 
+    request_id: str,
+    full_response: Optional[Dict] = None
+) -> bool:
     """
     Log an interaction to MongoDB with idempotency support.
     
@@ -253,6 +261,8 @@ async def log_interaction(user_id: str, message: str, classification: Dict, was_
         was_correct: Whether user was correct
         session_id: Session ID
         request_id: Unique request ID for idempotency
+        full_response: The complete API response for returning on duplicate requests
+
         
     Returns:
         True if successful
@@ -277,7 +287,8 @@ async def log_interaction(user_id: str, message: str, classification: Dict, was_
             "was_correct": was_correct,
             "timestamp": datetime.utcnow(),
             "session_id": session_id,
-            "request_id": request_id
+            "request_id": request_id,
+            "full_response": full_response
         }
         
         await db.interactions.insert_one(interaction)

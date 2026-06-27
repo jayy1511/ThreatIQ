@@ -273,9 +273,14 @@ export async function analyze(
     userId: string,
     userGuess?: string
 ): Promise<AnalysisResponse> {
+    // Generate a simple UUID for idempotency
+    const requestId = crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : Date.now().toString(36) + Math.random().toString(36).substring(2);
+
     return apiFetch<AnalysisResponse>('/analyze', {
         method: 'POST',
-        body: { message, user_id: userId, user_guess: userGuess },
+        body: { message, user_id: userId, user_guess: userGuess, request_id: requestId },
         authenticated: true,
         timeout: 120000,
     });

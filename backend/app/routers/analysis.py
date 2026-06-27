@@ -11,10 +11,12 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from app.models.schemas import AnalysisRequest, PublicAnalysisRequest, AnalysisResponse
 from app.routers.auth import verify_firebase_token
 from app.core.rate_limit import check_rate_limit
+from app.models.database import Database
 from app.config import settings
 import httpx
 import logging
 import asyncio
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +201,20 @@ async def analyze_message(
             user_id=request.user_id,
         )
         
+        # Idempotency check
+        if request.request_id:
+            db = Database.get_db()
+            existing = await db.interactions.find_one({
+                "user_id": request.user_id,
+                "request_id": request.request_id
+            })
+            if existing and existing.get("full_response"):
+                logger.info(f"Idempotency hit for request_id: {request.request_id}, returning cached response.")
+                return existing["full_response"]
+        
+        # Generate session ID early
+        session_id = str(uuid.uuid4())
+        
         # Get learning context from memory agent
         from app.agents.memory import memory_agent
         learning_context = await memory_agent.get_learning_context(request.user_id)
@@ -226,20 +242,20 @@ async def analyze_message(
             was_correct=was_correct
         )
         
+        # Add session_id to result for response compatibility
+        result['session_id'] = session_id
+        result['was_correct'] = was_correct
+        
         await InteractionLogger.log_interaction(
             user_id=request.user_id,
             message=request.message,
             user_guess=request.user_guess,
             classification=result['classification'],
             was_correct=was_correct,
-            session_id=None,
-            request_id=request.request_id
+            session_id=session_id,
+            request_id=request.request_id,
+            full_response=result
         )
-        
-        # Add session_id to result for response compatibility
-        import uuid
-        result['session_id'] = str(uuid.uuid4())
-        result['was_correct'] = was_correct
         
         return result
         
