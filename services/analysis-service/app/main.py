@@ -5,12 +5,14 @@ Stateless AI analysis microservice for ThreatIQ.
 Handles message classification, evidence finding, and coaching.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 import logging
 
 from app.schemas import AnalysisRequest, AnalysisResponse
 from app.orchestrator import run_analysis
+from app.config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +35,29 @@ app.add_middleware(
 )
 
 
+async def verify_internal_key(
+    x_internal_service_key: Optional[str] = Header(None),
+) -> None:
+    """
+    Verify that the caller presents the correct internal service API key.
+
+    In production (key configured), rejects requests without a valid key.
+    In development (no key configured), logs a warning and allows the request.
+    """
+    expected_key = settings.analysis_service_api_key
+
+    if not expected_key:
+        # No key configured — development mode, allow through with a warning
+        logger.warning("ANALYSIS_SERVICE_API_KEY not set — skipping internal auth")
+        return
+
+    if not x_internal_service_key or x_internal_service_key != expected_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
+
+
 @app.get("/")
 async def root():
     """Root endpoint with service info."""
@@ -50,9 +75,14 @@ async def health_check():
 
 
 @app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_message(request: AnalysisRequest):
+async def analyze_message(
+    request: AnalysisRequest,
+    _: None = Depends(verify_internal_key),
+):
     """
     Analyze a message for phishing indicators.
+    
+    Requires a valid X-Internal-Service-Key header.
     
     This endpoint runs the complete analysis pipeline:
     1. Classifier Agent - Determines if message is phishing/safe/unclear
@@ -74,12 +104,19 @@ async def analyze_message(request: AnalysisRequest):
         
     except Exception as e:
         logger.error(f"Analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed")
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup - fast, no blocking loads."""
     logger.info("Analysis Service starting up...")
+    if not settings.analysis_service_api_key:
+        logger.warning(
+            "ANALYSIS_SERVICE_API_KEY is not set. "
+            "The /analyze endpoint is unprotected. "
+            "Set this variable in production."
+        )
     logger.info("Dataset will load lazily on first request")
     logger.info("Analysis Service ready!")
+

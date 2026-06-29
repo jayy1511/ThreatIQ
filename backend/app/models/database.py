@@ -51,6 +51,14 @@ class Database:
             
             await cls.db.users.create_index("firebase_uid", unique=True)
             
+            # OAuth state collection: unique on state value, TTL auto-expires documents
+            await cls.db.oauth_states.create_index("state", unique=True)
+            await cls.db.oauth_states.create_index(
+                "expires_at",
+                expireAfterSeconds=0,
+                name="oauth_state_ttl"
+            )
+            
             logger.info("Database indexes created successfully")
             
         except Exception as e:

@@ -34,9 +34,13 @@ function generateUUID(): string {
   });
 }
 
+// Must stay aligned with backend schemas
+export type UserGuess = 'phishing' | 'safe' | 'unclear';
+export const MAX_MESSAGE_LENGTH = 12_000;
+
 export const analyzeMessage = async (
   message: string,
-  userGuess: string,
+  userGuess: UserGuess,
   userId: string
 ) => {
   const requestId = generateUUID();
@@ -51,15 +55,11 @@ export const analyzeMessage = async (
 
 export const analyzePublicMessage = async (
   message: string,
-  userGuess: string,
-  userId: string
+  userGuess: UserGuess
 ) => {
-  const requestId = generateUUID();
   const response = await api.post("/api/analyze-public", {
     message,
     user_guess: userGuess,
-    user_id: userId,
-    request_id: requestId,
   });
   return response.data;
 };

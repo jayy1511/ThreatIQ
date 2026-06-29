@@ -3,7 +3,11 @@ Analysis Service - Pydantic Schemas
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any
+
+# Must stay aligned with backend/app/models/schemas.py
+UserGuess = Literal["phishing", "safe", "unclear"]
+MAX_MESSAGE_LENGTH = 12_000
 
 
 class LearningContext(BaseModel):
@@ -17,8 +21,11 @@ class LearningContext(BaseModel):
 
 class AnalysisRequest(BaseModel):
     """Request model for analysis endpoint."""
-    message: str = Field(..., min_length=1, description="Message to analyze")
-    user_guess: Optional[str] = Field(None, description="User's prediction")
+    message: str = Field(
+        ..., min_length=1, max_length=MAX_MESSAGE_LENGTH,
+        description="Message to analyze",
+    )
+    user_guess: Optional[UserGuess] = Field(None, description="User's prediction")
     learning_context: Optional[LearningContext] = None
 
 

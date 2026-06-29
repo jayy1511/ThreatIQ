@@ -59,7 +59,8 @@ class InteractionLogger:
         classification: dict,
         was_correct: bool,
         session_id: str,
-        request_id: str
+        request_id: str,
+        full_response: dict = None
     ) -> bool:
         """Log interaction using ADK tool with idempotency."""
         return await log_interaction(
@@ -68,5 +69,6 @@ class InteractionLogger:
             classification=classification,
             was_correct=was_correct,
             session_id=session_id,
-            request_id=request_id
+            request_id=request_id,
+            full_response=full_response
         )

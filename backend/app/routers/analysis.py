@@ -7,13 +7,16 @@ This router handles:
 - /api/analysis-service/health - Health proxy for mobile cold-start detection
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from app.models.schemas import AnalysisRequest, AnalysisResponse
+from fastapi import APIRouter, HTTPException, Depends, Request
+from app.models.schemas import AnalysisRequest, PublicAnalysisRequest, AnalysisResponse
 from app.routers.auth import verify_firebase_token
+from app.core.rate_limit import check_rate_limit
+from app.models.database import Database
 from app.config import settings
 import httpx
 import logging
 import asyncio
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +38,18 @@ async def call_analysis_service_with_retry(
     Call the analysis-service with retry logic for Render cold starts.
     
     Implements exponential backoff for 502/503/504 errors and timeouts.
+    Sends X-Internal-Service-Key header for internal authentication.
     """
     payload = {
         "message": message,
         "user_guess": user_guess,
         "learning_context": learning_context
     }
+    
+    # Build internal service auth headers
+    headers = {"Content-Type": "application/json"}
+    if settings.analysis_service_api_key:
+        headers["X-Internal-Service-Key"] = settings.analysis_service_api_key
     
     last_error = None
     
@@ -51,7 +60,8 @@ async def call_analysis_service_with_retry(
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
                 response = await client.post(
                     f"{settings.analysis_service_url}/analyze",
-                    json=payload
+                    json=payload,
+                    headers=headers,
                 )
                 
                 # Success
@@ -163,6 +173,7 @@ async def analysis_service_health():
 
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_message(
+    http_request: Request,
     request: AnalysisRequest,
     user_data: dict = Depends(verify_firebase_token)
 ):
@@ -181,6 +192,28 @@ async def analyze_message(
         
         if request.user_id != user_data.get('uid'):
             raise HTTPException(status_code=403, detail="User ID mismatch")
+        
+        # Rate limit by authenticated user
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_analysis,
+            window_seconds=settings.rate_limit_analysis_window,
+            user_id=request.user_id,
+        )
+        
+        # Idempotency check
+        if request.request_id:
+            db = Database.get_db()
+            existing = await db.interactions.find_one({
+                "user_id": request.user_id,
+                "request_id": request.request_id
+            })
+            if existing and existing.get("full_response"):
+                logger.info(f"Idempotency hit for request_id: {request.request_id}, returning cached response.")
+                return existing["full_response"]
+        
+        # Generate session ID early
+        session_id = str(uuid.uuid4())
         
         # Get learning context from memory agent
         from app.agents.memory import memory_agent
@@ -209,20 +242,20 @@ async def analyze_message(
             was_correct=was_correct
         )
         
+        # Add session_id to result for response compatibility
+        result['session_id'] = session_id
+        result['was_correct'] = was_correct
+        
         await InteractionLogger.log_interaction(
             user_id=request.user_id,
             message=request.message,
             user_guess=request.user_guess,
             classification=result['classification'],
             was_correct=was_correct,
-            session_id=None,
-            request_id=request.request_id
+            session_id=session_id,
+            request_id=request.request_id,
+            full_response=result
         )
-        
-        # Add session_id to result for response compatibility
-        import uuid
-        result['session_id'] = str(uuid.uuid4())
-        result['was_correct'] = was_correct
         
         return result
         
@@ -230,16 +263,26 @@ async def analyze_message(
         raise
     except Exception as e:
         logger.error(f"Error in analysis endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed")
 
 
 @router.post("/analyze-public")
-async def analyze_message_public(request: AnalysisRequest):
+async def analyze_message_public(http_request: Request, request: PublicAnalysisRequest):
     """
     Public analysis endpoint (no auth required) for testing.
     Limited functionality - doesn't save to user profile.
+    
+    Accepts only message and optional user_guess.
+    Does not accept user_id or request_id.
     """
     try:
+        # Rate limit by IP (no auth)
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_public,
+            window_seconds=settings.rate_limit_public_window,
+        )
+        
         logger.info("Public analysis request (no auth)")
         
         # Call analysis service with retry (no learning context)
@@ -259,4 +302,4 @@ async def analyze_message_public(request: AnalysisRequest):
         raise
     except Exception as e:
         logger.error(f"Error in public analysis endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed")

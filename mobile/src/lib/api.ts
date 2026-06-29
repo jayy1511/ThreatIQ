@@ -6,9 +6,13 @@ import { API_BASE_URL } from './config';
 // Types
 // ============================================
 
+// Must stay aligned with backend schemas
+export type UserGuess = 'phishing' | 'safe' | 'unclear';
+export const MAX_MESSAGE_LENGTH = 12_000;
+
 export interface AnalysisRequest {
     message: string;
-    user_guess?: string;
+    user_guess?: UserGuess;
     user_id?: string;
 }
 
@@ -16,17 +20,33 @@ export interface ClassificationResult {
     label: 'phishing' | 'suspicious' | 'safe';
     confidence: number;
     reason_tags: string[];
+    explanation: string;
+}
+
+export interface PhishingExample {
+    message: string;
+    category: string;
+    similarity?: number;
+    description?: string;
+}
+
+export interface QuizQuestion {
+    question: string;
+    options: string[];
+    correct_answer: string;
+}
+
+export interface CoachResponse {
+    verdict: string;
+    explanation: string;
+    similar_examples: PhishingExample[];
+    tips: string[];
+    quiz?: QuizQuestion;
 }
 
 export interface AnalysisResponse {
     classification: ClassificationResult;
-    explanation: string;
-    similar_examples: Array<{
-        text: string;
-        label: string;
-        similarity: number;
-    }>;
-    coach_response: string;
+    coach_response: CoachResponse;
     session_id: string;
     category?: string;
     was_correct?: boolean;
@@ -253,9 +273,14 @@ export async function analyze(
     userId: string,
     userGuess?: string
 ): Promise<AnalysisResponse> {
+    // Generate a simple UUID for idempotency
+    const requestId = crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : Date.now().toString(36) + Math.random().toString(36).substring(2);
+
     return apiFetch<AnalysisResponse>('/analyze', {
         method: 'POST',
-        body: { message, user_id: userId, user_guess: userGuess },
+        body: { message, user_id: userId, user_guess: userGuess, request_id: requestId },
         authenticated: true,
         timeout: 120000,
     });

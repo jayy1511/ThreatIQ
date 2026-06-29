@@ -1,14 +1,40 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Literal, Optional, List, Dict
 from datetime import datetime
+
+# Valid values for user_guess across all request schemas
+UserGuess = Literal["phishing", "safe", "unclear"]
+
+# Maximum message length accepted for analysis (characters)
+MAX_MESSAGE_LENGTH = 12_000
 
 
 class AnalysisRequest(BaseModel):
-    """Request model for phishing analysis."""
-    message: str = Field(..., min_length=1, description="Email or message to analyze")
-    user_guess: Optional[str] = Field(None, description="User's prediction: phishing, safe, or unclear")
+    """Request model for authenticated phishing analysis."""
+    message: str = Field(
+        ..., min_length=1, max_length=MAX_MESSAGE_LENGTH,
+        description="Email or message to analyze",
+    )
+    user_guess: Optional[UserGuess] = Field(
+        None, description="User's prediction: phishing, safe, or unclear",
+    )
     user_id: str = Field(..., description="Firebase UID")
     request_id: Optional[str] = Field(None, description="Optional request ID for idempotency or tracking")
+
+
+class PublicAnalysisRequest(BaseModel):
+    """Request model for public (unauthenticated) phishing analysis.
+
+    Does not accept user_id or request_id because public analysis
+    is not saved to any user's profile or history.
+    """
+    message: str = Field(
+        ..., min_length=1, max_length=MAX_MESSAGE_LENGTH,
+        description="Email or message to analyze",
+    )
+    user_guess: Optional[UserGuess] = Field(
+        None, description="User's prediction: phishing, safe, or unclear",
+    )
 
 
 class ClassificationResult(BaseModel):

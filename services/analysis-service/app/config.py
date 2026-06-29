@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_api_keys: str = ""
     
+    # Internal service authentication
+    # Required in production; gateway must present this key via X-Internal-Service-Key header
+    analysis_service_api_key: str = ""
+    
     # Service configuration
     service_host: str = "0.0.0.0"
     service_port: int = 8010

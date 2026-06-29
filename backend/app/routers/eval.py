@@ -1,5 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.routers.auth import verify_firebase_token
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from app.routers.auth import verify_admin_user
+from app.core.rate_limit import check_rate_limit
+from app.core.redact import redact_sensitive_info
+from app.config import settings
 from app.models.database import Database
 from app.llm.gemini_client import get_gemini_client
 from datetime import datetime
@@ -41,16 +44,24 @@ Be concise but precise in your comments.
 
 @router.post("/admin/eval-sample")
 async def evaluate_sample(
+    http_request: Request,
     limit: int = Query(5, ge=1, le=20),
-    user_data: dict = Depends(verify_firebase_token),
+    user_data: dict = Depends(verify_admin_user),
 ):
     """
     Run evaluation agent on a small sample of recent interactions.
 
-    NOTE: For demo purposes, this endpoint is available to any authenticated user.
-    In production, you'd restrict this to admins only.
+    Admin-only: requires the ``admin`` Firebase custom claim.
     """
     try:
+        # Rate limit by admin user
+        check_rate_limit(
+            http_request,
+            max_requests=settings.rate_limit_admin,
+            window_seconds=settings.rate_limit_admin_window,
+            user_id=user_data.get('uid'),
+        )
+        
         db = Database.get_db()
 
         cursor = (
@@ -70,10 +81,13 @@ async def evaluate_sample(
         interactions = []
         async for doc in cursor:
             clf = doc.get("classification", {}) or {}
+            raw_msg = doc.get("message", "")
+            redacted_msg = redact_sensitive_info(raw_msg)
+            
             interactions.append(
                 {
                     "interaction_id": str(doc["_id"]),
-                    "message": doc.get("message", ""),
+                    "message": redacted_msg,
                     "system_label": clf.get("label", "unknown"),
                     "system_confidence": float(clf.get("confidence", 0.0)),
                     "timestamp": doc.get("timestamp"),
@@ -152,5 +166,5 @@ async def evaluate_sample(
         logger.error(f"Error running evaluation: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to run evaluation: {str(e)}",
+            detail="Failed to run evaluation",
         )
