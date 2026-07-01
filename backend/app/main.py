@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.models.database import Database
-from agent import root_agent  
 import logging
 from app.routers import metrics
 from app.routers import eval as eval_router

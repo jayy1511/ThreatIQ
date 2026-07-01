@@ -11,8 +11,8 @@ from typing import List, Dict
 from datetime import datetime
 from app.services.gmail_oauth import gmail_oauth_service, GmailOAuthError
 from app.services.gmail_client import GmailClient, GmailClientError
+from app.services.analysis_client import call_analysis_service_for_triage
 from app.models.database import Database
-from agent import root_agent
 
 logger = logging.getLogger(__name__)
 
@@ -160,15 +160,27 @@ class GmailTriageService:
         
         logger.info(f"Analyzing message {message_id}: {subject[:50]}")
         
-        analysis_result = await root_agent.analyze_message(
-            message=analysis_text,
-            user_id=user_id,
-            user_guess=None
-        )
+        # Call the canonical analysis microservice (not the legacy root_agent)
+        analysis_result = await call_analysis_service_for_triage(analysis_text)
         
-        classification = analysis_result['classification']
+        if not analysis_result:
+            # Analysis service unavailable – skip gracefully
+            logger.warning(f"Analysis service unavailable for message {message_id}, skipping")
+            return {
+                "message_id": message_id,
+                "from": from_header,
+                "subject": subject,
+                "label": "UNKNOWN",
+                "confidence": 0.0,
+                "reasons": [],
+                "label_applied": False,
+                "success": False,
+                "error": "Analysis service unavailable"
+            }
+        
+        classification = analysis_result.get('classification', {})
         label_category = self.LABEL_MAPPING.get(
-            classification['label'].upper(),
+            classification.get('label', 'suspicious').upper(),
             'SUSPICIOUS'
         )
         
@@ -197,7 +209,7 @@ class GmailTriageService:
             "subject": subject,
             "date": date_header,
             "snippet": snippet,
-            "body_excerpt": body[:500],
+            # body_excerpt intentionally excluded to avoid storing raw email content
             "label": label_category,
             "confidence": classification.get('confidence', 0),
             "reasons": classification.get('reason_tags', []),
