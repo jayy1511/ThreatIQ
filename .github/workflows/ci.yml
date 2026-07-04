@@ -40,11 +40,9 @@ jobs:
 
       - name: Run typecheck
         run: npm run typecheck --if-present
-        continue-on-error: true
 
       - name: Run tests
         run: npm test --if-present
-        continue-on-error: true
 
       - name: Build
         run: npm run build
@@ -89,8 +87,8 @@ jobs:
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
             echo "Running tests..."
-            pip install pytest pytest-asyncio || true
-            python -m pytest tests/ -v --tb=short || python -m unittest discover -s tests -v
+            pip install pytest pytest-asyncio
+            python -m pytest tests/ -v --tb=short
           else
             echo "No tests found, skipping"
           fi
@@ -129,8 +127,8 @@ jobs:
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
             echo "Running tests..."
-            pip install pytest pytest-asyncio || true
-            python -m pytest tests/ -v --tb=short || python -m unittest discover -s tests -v
+            pip install pytest pytest-asyncio
+            python -m pytest tests/ -v --tb=short
           else
             echo "No tests found, skipping"
           fi
