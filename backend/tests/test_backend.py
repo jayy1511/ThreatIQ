@@ -1,215 +1,155 @@
 """
-Automated Backend Testing Script
+Backend unit tests — no live server or database required.
 
-Run this after the server is running to test all endpoints.
+These tests verify:
+1. Pydantic request/response schema validation (correct types, ranges, limits)
+2. Key constants stay in sync
+
+All tests run offline (no HTTP calls, no MongoDB).
 """
+import pytest
+from datetime import datetime
+from pydantic import ValidationError
 
-import requests
-import json
-import time
-from typing import Dict, List
+from app.models.schemas import (
+    AnalysisRequest,
+    PublicAnalysisRequest,
+    ClassificationResult,
+    GmailTriageRequest,
+    MAX_MESSAGE_LENGTH,
+)
 
-BASE_URL = "http://localhost:8000"
 
-# Color codes for terminal output
-GREEN = '\033[92m'
-RED = '\033[91m'
-YELLOW = '\033[93m'
-BLUE = '\033[94m'
-RESET = '\033[0m'
+# ---------------------------------------------------------------------------
+# AnalysisRequest
+# ---------------------------------------------------------------------------
 
-def print_success(msg):
-    print(f"{GREEN}✅ {msg}{RESET}")
+class TestAnalysisRequest:
 
-def print_error(msg):
-    print(f"{RED}❌ {msg}{RESET}")
-
-def print_info(msg):
-    print(f"{BLUE}ℹ️  {msg}{RESET}")
-
-def print_warning(msg):
-    print(f"{YELLOW}⚠️  {msg}{RESET}")
-
-def test_health_check():
-    """Test health check endpoint."""
-    print("\n" + "="*60)
-    print("🏥 Testing Health Check Endpoint")
-    print("="*60)
-    
-    try:
-        response = requests.get(f"{BASE_URL}/health", timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            print_success(f"Health check passed: {data}")
-            return True
-        else:
-            print_error(f"Health check failed with status {response.status_code}")
-            return False
-            
-    except Exception as e:
-        print_error(f"Health check failed: {e}")
-        return False
-
-def test_public_analysis(message: str, user_guess: str = None) -> Dict:
-    """Test public analysis endpoint."""
-    
-    payload = {
-        "message": message,
-        "user_id": "test_user_" + str(int(time.time())),
-        "user_guess": user_guess
-    }
-    
-    try:
-        print_info(f"Testing message: {message[:50]}...")
-        
-        response = requests.post(
-            f"{BASE_URL}/api/analyze-public",
-            json=payload,
-            timeout=30
+    def test_valid_request(self):
+        req = AnalysisRequest(
+            message="Click here to claim your prize!",
+            user_id="uid_abc123",
         )
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Validate response structure
-            if "classification" in data and "coach_response" in data:
-                label = data["classification"]["label"]
-                confidence = data["classification"]["confidence"]
-                was_correct = data.get("was_correct")
-                
-                print_success(f"Analysis complete!")
-                print(f"   Verdict: {label} (confidence: {confidence:.2f})")
-                print(f"   User was correct: {was_correct}")
-                print(f"   Tips provided: {len(data['coach_response'].get('tips', []))}")
-                print(f"   Similar examples: {len(data['coach_response'].get('similar_examples', []))}")
-                
-                return data
-            else:
-                print_error("Invalid response structure")
-                return None
-        else:
-            print_error(f"Request failed with status {response.status_code}")
-            print(f"Response: {response.text[:200]}")
-            return None
-            
-    except Exception as e:
-        print_error(f"Analysis failed: {e}")
-        return None
+        assert req.message == "Click here to claim your prize!"
+        assert req.user_guess is None
+        assert req.user_id == "uid_abc123"
 
-def run_comprehensive_tests():
-    """Run comprehensive test suite."""
-    
-    print("\n" + "="*60)
-    print("🧪 ThreatIQ Backend - Comprehensive Testing")
-    print("="*60)
-    
-    # Test cases
-    test_cases = [
-        {
-            "name": "Banking Phishing",
-            "message": "URGENT: Your bank account has been suspended. Click here to verify: http://fake-bank.com/verify",
-            "user_guess": "phishing",
-            "expected": "phishing"
-        },
-        {
-            "name": "Shipping Scam",
-            "message": "Your package delivery failed. Update your address: http://fake-shipping.com",
-            "user_guess": "phishing",
-            "expected": "phishing"
-        },
-        {
-            "name": "Prize Scam",
-            "message": "Congratulations! You've won $1,000,000. Send your details to claim your prize now!",
-            "user_guess": "phishing",
-            "expected": "phishing"
-        },
-        {
-            "name": "Account Alert Phishing",
-            "message": "Security Alert: Suspicious login attempt detected. Change your password at: http://phishing-site.com",
-            "user_guess": "phishing",
-            "expected": "phishing"
-        },
-        {
-            "name": "Legitimate Email",
-            "message": "Your Amazon order #12345 has been shipped and will arrive tomorrow.",
-            "user_guess": "safe",
-            "expected": "safe"
-        },
-        {
-            "name": "Legitimate Bank Email",
-            "message": "Dear customer, your monthly bank statement is ready for review in your online banking portal.",
-            "user_guess": "safe",
-            "expected": "safe"
-        }
-    ]
-    
-    results = {
-        "total": len(test_cases),
-        "passed": 0,
-        "failed": 0,
-        "errors": 0
-    }
-    
-    # First test health check
-    if not test_health_check():
-        print_error("Health check failed. Make sure the server is running!")
-        return
-    
-    print("\n" + "="*60)
-    print("📧 Testing Message Analysis")
-    print("="*60)
-    
-    for i, test in enumerate(test_cases, 1):
-        print(f"\n[Test {i}/{len(test_cases)}] {test['name']}")
-        print("-" * 60)
-        
-        result = test_public_analysis(test["message"], test.get("user_guess"))
-        
-        if result is None:
-            results["errors"] += 1
-        else:
-            actual_label = result["classification"]["label"]
-            expected_label = test["expected"]
-            
-            if actual_label == expected_label:
-                results["passed"] += 1
-                print_success(f"Test passed! Classified as: {actual_label}")
-            else:
-                results["failed"] += 1
-                print_warning(f"Expected: {expected_label}, Got: {actual_label}")
-        
-        # Delay to avoid rate limiting
-        if i < len(test_cases):
-            time.sleep(2)
-    
-    # Print summary
-    print("\n" + "="*60)
-    print("📊 Test Summary")
-    print("="*60)
-    print(f"Total Tests:   {results['total']}")
-    print(f"{GREEN}Passed:        {results['passed']}{RESET}")
-    print(f"{YELLOW}Failed:        {results['failed']}{RESET}")
-    print(f"{RED}Errors:        {results['errors']}{RESET}")
-    
-    accuracy = (results['passed'] / results['total']) * 100 if results['total'] > 0 else 0
-    print(f"\nAccuracy:      {accuracy:.1f}%")
-    
-    if results['passed'] == results['total']:
-        print_success("\n🎉 All tests passed!")
-    elif results['errors'] == 0:
-        print_warning(f"\n⚠️  {results['failed']} tests had unexpected results")
-    else:
-        print_error("\n❌ Some tests encountered errors")
-    
-    print("="*60)
+    def test_valid_with_guess(self):
+        req = AnalysisRequest(
+            message="Normal message",
+            user_id="uid_xyz",
+            user_guess="phishing",
+        )
+        assert req.user_guess == "phishing"
 
-if __name__ == "__main__":
-    print("🚀 Starting automated backend tests...")
-    print("⚠️  Make sure the backend server is running on http://localhost:8000")
-    
-    input("\nPress Enter to continue...")
-    
-    run_comprehensive_tests()
-    
-    print("\n✨ Testing complete!")
+    def test_invalid_guess_rejected(self):
+        with pytest.raises(ValidationError):
+            AnalysisRequest(message="Hello", user_id="uid", user_guess="malware")
+
+    def test_message_too_short(self):
+        with pytest.raises(ValidationError):
+            AnalysisRequest(message="", user_id="uid")
+
+    def test_message_too_long(self):
+        with pytest.raises(ValidationError):
+            AnalysisRequest(message="a" * (MAX_MESSAGE_LENGTH + 1), user_id="uid")
+
+    def test_message_at_max_length(self):
+        req = AnalysisRequest(message="a" * MAX_MESSAGE_LENGTH, user_id="uid")
+        assert len(req.message) == MAX_MESSAGE_LENGTH
+
+    def test_missing_user_id(self):
+        with pytest.raises(ValidationError):
+            AnalysisRequest(message="Hello")
+
+    def test_optional_request_id(self):
+        req = AnalysisRequest(
+            message="Test", user_id="uid", request_id="req-001"
+        )
+        assert req.request_id == "req-001"
+
+
+# ---------------------------------------------------------------------------
+# PublicAnalysisRequest
+# ---------------------------------------------------------------------------
+
+class TestPublicAnalysisRequest:
+
+    def test_valid_public_request(self):
+        req = PublicAnalysisRequest(message="Is this email safe?")
+        assert req.user_guess is None
+
+    def test_public_request_no_user_id(self):
+        # Public endpoint must NOT accept user_id — field should not exist
+        # (ensuring schema separation between public and authenticated endpoints)
+        req = PublicAnalysisRequest(message="Test message")
+        assert not hasattr(req, "user_id")
+
+    def test_public_request_with_guess(self):
+        req = PublicAnalysisRequest(message="Test message", user_guess="safe")
+        assert req.user_guess == "safe"
+
+
+# ---------------------------------------------------------------------------
+# ClassificationResult
+# ---------------------------------------------------------------------------
+
+class TestClassificationResult:
+
+    def test_valid_classification(self):
+        clf = ClassificationResult(
+            label="phishing",
+            confidence=0.95,
+            reason_tags=["suspicious_link", "urgent_language"],
+            explanation="Clear phishing indicators.",
+        )
+        assert clf.label == "phishing"
+        assert clf.confidence == 0.95
+
+    def test_confidence_must_be_in_range(self):
+        with pytest.raises(ValidationError):
+            ClassificationResult(
+                label="safe", confidence=1.5, reason_tags=[], explanation="ok"
+            )
+
+    def test_confidence_negative_rejected(self):
+        with pytest.raises(ValidationError):
+            ClassificationResult(
+                label="safe", confidence=-0.1, reason_tags=[], explanation="ok"
+            )
+
+
+# ---------------------------------------------------------------------------
+# GmailTriageRequest
+# ---------------------------------------------------------------------------
+
+class TestGmailTriageRequest:
+
+    def test_defaults(self):
+        req = GmailTriageRequest()
+        assert req.limit == 10
+        assert req.mark_spam is False
+        assert req.archive_safe is False
+
+    def test_limit_upper_bound(self):
+        with pytest.raises(ValidationError):
+            GmailTriageRequest(limit=51)
+
+    def test_limit_lower_bound(self):
+        with pytest.raises(ValidationError):
+            GmailTriageRequest(limit=0)
+
+    def test_valid_custom_limit(self):
+        req = GmailTriageRequest(limit=25)
+        assert req.limit == 25
+
+
+# ---------------------------------------------------------------------------
+# Constants alignment check
+# ---------------------------------------------------------------------------
+
+class TestConstants:
+    def test_max_message_length_is_12k(self):
+        """Ensure the constant hasn't been accidentally changed."""
+        assert MAX_MESSAGE_LENGTH == 12_000
