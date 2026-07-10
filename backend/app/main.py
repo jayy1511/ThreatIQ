@@ -2,11 +2,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.models.database import Database
-from agent import root_agent  
 import logging
 from app.routers import metrics
 from app.routers import eval as eval_router
-from app.routers import analysis, profile, auth, gmail, lessons
+from app.routers import analysis, profile, auth, gmail, lessons, dashboard
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,6 +105,7 @@ app.include_router(profile.router, prefix="/api", tags=["Profile"])
 app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(gmail.router, prefix="/api", tags=["Gmail"])
 app.include_router(lessons.router, prefix="/api", tags=["Lessons"])
+app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(metrics.router, prefix="/api")
 app.include_router(eval_router.router, prefix="/api")
 

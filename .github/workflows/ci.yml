@@ -40,11 +40,9 @@ jobs:
 
       - name: Run typecheck
         run: npm run typecheck --if-present
-        continue-on-error: true
 
       - name: Run tests
         run: npm test --if-present
-        continue-on-error: true
 
       - name: Build
         run: npm run build
@@ -65,6 +63,15 @@ jobs:
         working-directory: backend
     env:
       ANALYSIS_SERVICE_URL: http://localhost:9000
+      GOOGLE_CLIENT_ID: dummy
+      GOOGLE_CLIENT_SECRET: dummy
+      GOOGLE_REDIRECT_URI: dummy
+      FRONTEND_URL: dummy
+      TOKEN_ENCRYPTION_KEY: "K5-aFjI-0Hw_a7A7wz0Z7b4x3wT_x0hW9Lz8_wZz_oU="
+      MONGODB_URI: mongodb://dummy
+      FIREBASE_PROJECT_ID: dummy
+      FIREBASE_PRIVATE_KEY: dummy
+      FIREBASE_CLIENT_EMAIL: dummy
 
     steps:
       - name: Checkout repository
@@ -89,8 +96,8 @@ jobs:
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
             echo "Running tests..."
-            pip install pytest pytest-asyncio || true
-            python -m pytest tests/ -v --tb=short || python -m unittest discover -s tests -v
+            pip install pytest pytest-asyncio
+            python -m pytest tests/ -v --tb=short
           else
             echo "No tests found, skipping"
           fi
@@ -129,8 +136,8 @@ jobs:
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
             echo "Running tests..."
-            pip install pytest pytest-asyncio || true
-            python -m pytest tests/ -v --tb=short || python -m unittest discover -s tests -v
+            pip install pytest pytest-asyncio
+            python -m pytest tests/ -v --tb=short
           else
             echo "No tests found, skipping"
           fi

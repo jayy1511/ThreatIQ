@@ -1,17 +1,19 @@
-﻿import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBn3FVP55eHFhEqH4nJb6qrgdzTikU_CZA",
-  authDomain: "threatiq-dc99e.firebaseapp.com",
-  projectId: "threatiq-dc99e",
-  storageBucket: "threatiq-dc99e.appspot.com",
-  messagingSenderId: "229250264596",
-  appId: "1:229250264596:web:a2090adc2e7a4f95e90101",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 if (!firebaseConfig.apiKey) {
-  throw new Error("Firebase apiKey is missing in firebaseConfig.");
+  console.error(
+    "Firebase API Key is missing! Make sure NEXT_PUBLIC_FIREBASE_API_KEY is set in your .env.local file."
+  );
 }
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();

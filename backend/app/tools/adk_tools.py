@@ -249,7 +249,8 @@ async def log_interaction(
     was_correct: Optional[bool], 
     session_id: str, 
     request_id: str,
-    full_response: Optional[Dict] = None
+    full_response: Optional[Dict] = None,
+    save_message_text: bool = True,
 ) -> bool:
     """
     Log an interaction to MongoDB with idempotency support.
@@ -282,7 +283,9 @@ async def log_interaction(
         
         interaction = {
             "user_id": user_id,
-            "message": message,
+            # Only store the raw message text if the user has opted in.
+            # When save_message_text is False, we store None to protect privacy.
+            "message": message if save_message_text else None,
             "classification": classification,
             "was_correct": was_correct,
             "timestamp": datetime.utcnow(),
