@@ -64,6 +64,34 @@ export const analyzePublicMessage = async (
   return response.data;
 };
 
+// Single aggregate endpoint — replaces 4 separate dashboard calls
+export const getDashboard = async (userId: string) => {
+  const response = await api.get(`/api/dashboard`);
+  return response.data as {
+    summary: {
+      total_analyzed: number;
+      accuracy: number;
+      categories_seen: number;
+      weak_spots: string[];
+    } | null;
+    lesson_progress: {
+      xp_total: number;
+      level: number;
+      streak_current: number;
+      streak_best: number;
+      last_lesson_completed_date: string | null;
+      lessons_completed: number;
+    } | null;
+    today_lesson: {
+      lesson: { lesson_id: string; title: string; topic: string };
+      date: string;
+      already_completed: boolean;
+      completion_score: number | null;
+    } | null;
+    gmail: { connected: boolean; email: string | null };
+  };
+};
+
 export const getUserProfile = async (userId: string) => {
   const response = await api.get(`/api/profile/${userId}`);
   return response.data.profile;

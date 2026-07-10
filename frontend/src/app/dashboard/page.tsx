@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useState } from 'react';
 import {
@@ -11,7 +11,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
-import { getUserSummary, getLessonProgress, getTodayLesson, getGmailStatus } from '@/lib/api';
+import { getDashboard } from '@/lib/api';
 import { Shield, Target, TrendingUp, AlertTriangle, CheckCircle2, XCircle, Flame, BookOpen, Mail, ArrowRight } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -61,27 +61,22 @@ export default function DashboardPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (user) {
-      const fetchData = async () => {
-        try {
-          const [summaryData, progressData, lessonData, gmailData] = await Promise.all([
-            getUserSummary(user.uid).catch(() => null),
-            getLessonProgress().catch(() => null),
-            getTodayLesson().catch(() => null),
-            getGmailStatus().catch(() => ({ connected: false })),
-          ]);
-          setSummary(summaryData);
-          setLessonProgress(progressData);
-          setTodayLesson(lessonData);
-          setGmailConnected(gmailData?.connected || false);
-        } catch (error) {
-          console.error('Error fetching dashboard data:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchData();
-    }
+    if (!user) return;
+    const fetchData = async () => {
+      try {
+        // Single request replaces 4 separate API calls
+        const data = await getDashboard(user.uid);
+        setSummary(data.summary);
+        setLessonProgress(data.lesson_progress);
+        setTodayLesson(data.today_lesson);
+        setGmailConnected(data.gmail?.connected ?? false);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, [user]);
 
   if (loading || authLoading) {
