@@ -79,6 +79,26 @@ export const getUserHistory = async (userId: string) => {
   return response.data.history;
 };
 
+export const deleteHistoryItem = async (userId: string, itemId: string) => {
+  const response = await api.delete(`/api/profile/${userId}/history/${itemId}`);
+  return response.data;
+};
+
+export const clearHistory = async (userId: string) => {
+  const response = await api.delete(`/api/profile/${userId}/history`);
+  return response.data;
+};
+
+export const updatePrivacySettings = async (
+  userId: string,
+  saveMessageText: boolean
+) => {
+  const response = await api.patch(`/api/profile/${userId}/settings`, {
+    save_message_text: saveMessageText,
+  });
+  return response.data;
+};
+
 export const getGmailStatus = async () => {
   const response = await api.get("/api/gmail/status");
   return response.data;

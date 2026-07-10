@@ -140,6 +140,13 @@ async def analyze_message(
         result['session_id'] = session_id
         result['was_correct'] = was_correct
         
+        # Read user's privacy preference for message text storage
+        db = Database.get_db()
+        user_profile = await db.user_profiles.find_one({"user_id": request.user_id})
+        save_message_text = True  # safe default: preserve existing behaviour
+        if user_profile is not None:
+            save_message_text = user_profile.get("save_message_text", True)
+        
         await InteractionLogger.log_interaction(
             user_id=request.user_id,
             message=request.message,
@@ -148,7 +155,8 @@ async def analyze_message(
             was_correct=was_correct,
             session_id=session_id,
             request_id=request.request_id,
-            full_response=result
+            full_response=result,
+            save_message_text=save_message_text,
         )
         
         return result
