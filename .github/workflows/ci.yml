@@ -67,7 +67,7 @@ jobs:
       GOOGLE_CLIENT_SECRET: dummy
       GOOGLE_REDIRECT_URI: dummy
       FRONTEND_URL: dummy
-      TOKEN_ENCRYPTION_KEY: dummy
+      TOKEN_ENCRYPTION_KEY: "K5-aFjI-0Hw_a7A7wz0Z7b4x3wT_x0hW9Lz8_wZz_oU="
       MONGODB_URI: mongodb://dummy
       FIREBASE_PROJECT_ID: dummy
       FIREBASE_PRIVATE_KEY: dummy
