@@ -65,7 +65,7 @@ export const analyzePublicMessage = async (
 };
 
 // Single aggregate endpoint — replaces 4 separate dashboard calls
-export const getDashboard = async (userId: string) => {
+export const getDashboard = async () => {
   const response = await api.get(`/api/dashboard`);
   return response.data as {
     summary: {

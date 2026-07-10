@@ -63,6 +63,11 @@ jobs:
         working-directory: backend
     env:
       ANALYSIS_SERVICE_URL: http://localhost:9000
+      GOOGLE_CLIENT_ID: dummy
+      GOOGLE_CLIENT_SECRET: dummy
+      GOOGLE_REDIRECT_URI: dummy
+      FRONTEND_URL: dummy
+      TOKEN_ENCRYPTION_KEY: dummy
 
     steps:
       - name: Checkout repository

@@ -65,7 +65,7 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         // Single request replaces 4 separate API calls
-        const data = await getDashboard(user.uid);
+        const data = await getDashboard();
         setSummary(data.summary);
         setLessonProgress(data.lesson_progress);
         setTodayLesson(data.today_lesson);
