@@ -68,6 +68,10 @@ jobs:
       GOOGLE_REDIRECT_URI: dummy
       FRONTEND_URL: dummy
       TOKEN_ENCRYPTION_KEY: dummy
+      MONGODB_URI: mongodb://dummy
+      FIREBASE_PROJECT_ID: dummy
+      FIREBASE_PRIVATE_KEY: dummy
+      FIREBASE_CLIENT_EMAIL: dummy
 
     steps:
       - name: Checkout repository
