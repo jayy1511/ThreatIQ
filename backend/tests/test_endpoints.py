@@ -242,3 +242,132 @@ class TestAuthenticatedAnalysis:
             headers={"Authorization": "Bearer fake-token"},
         )
         assert resp.status_code == 422
+
+
+# ─── Streaming endpoint tests ──────────────────────────────────────────────────
+
+class TestStreamingAnalysis:
+    """Tests for POST /api/analyze/stream (C1)."""
+
+    def _stream_events(self, resp) -> list:
+        """Parse SSE data lines from a streaming response body."""
+        import json as _json
+        events = []
+        for line in resp.text.splitlines():
+            if line.startswith("data: "):
+                try:
+                    events.append(_json.loads(line[len("data: "):]))
+                except _json.JSONDecodeError:
+                    pass
+        return events
+
+    def test_stream_requires_auth(self, backend_client):
+        """Streaming endpoint must reject requests without Authorization header."""
+        resp = backend_client.post(
+            "/api/analyze/stream",
+            json={"message": "Hello", "user_id": "uid_abc"},
+        )
+        assert resp.status_code == 401
+
+    def test_stream_rejects_mismatched_user_id(self, backend_client):
+        """Streaming endpoint must return 403 when user_id does not match token uid."""
+        with patch("app.routers.analysis.call_analysis_service_with_retry",
+                   new=AsyncMock(return_value=dict(FAKE_ANALYSIS_RESULT))):
+            resp = backend_client.post(
+                "/api/analyze/stream",
+                json={"message": "Hello", "user_id": "wrong_uid"},
+                headers={"Authorization": "Bearer fake-token"},
+            )
+        assert resp.status_code == 403
+
+    def test_stream_emits_complete_event(self, backend_client):
+        """Successful stream must end with a 'complete' event containing the result."""
+        import json as _json
+
+        # Build a fake SSE body that the analysis service would return
+        fake_events = [
+            {"stage": "started", "message": "Analysis started"},
+            {"stage": "classification_started", "message": "Classifying message…"},
+            {"stage": "classification_complete", "message": "Classification complete",
+             "data": {"label": "phishing", "confidence": 0.9}},
+            {"stage": "evidence_started", "message": "Gathering evidence…"},
+            {"stage": "evidence_complete", "message": "Evidence gathered", "data": {"examples_found": 0}},
+            {"stage": "coach_started", "message": "Preparing coaching…"},
+            {"stage": "coach_complete", "message": "Coaching explanation ready"},
+            {"stage": "complete", "message": "Analysis complete", "result": FAKE_ANALYSIS_RESULT},
+        ]
+        fake_sse_body = "".join(f"data: {_json.dumps(e)}\n\n" for e in fake_events)
+
+        class FakeStreamResp:
+            status_code = 200
+            async def aiter_lines(self):
+                for line in fake_sse_body.splitlines():
+                    yield line
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+
+        class FakeAsyncClient:
+            def stream(self, *args, **kwargs):
+                return FakeStreamResp()
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+
+        with patch("app.routers.analysis.httpx.AsyncClient", return_value=FakeAsyncClient()), \
+             patch("app.agents.memory.memory_agent.get_learning_context", new=AsyncMock(return_value={})), \
+             patch("app.agents.memory.memory_agent.update_profile", new=AsyncMock()), \
+             patch("app.tools.profile_tools.InteractionLogger.log_interaction", new=AsyncMock()), \
+             patch("app.models.database.Database.get_db", return_value=MagicMock(
+                 interactions=MagicMock(find_one=AsyncMock(return_value=None)),
+                 user_profiles=MagicMock(find_one=AsyncMock(return_value=None)),
+             )):
+            resp = backend_client.post(
+                "/api/analyze/stream",
+                json={"message": "Click here to claim your prize!", "user_id": "user_abc123"},
+                headers={"Authorization": "Bearer fake-token"},
+            )
+
+        assert resp.status_code == 200
+        events = self._stream_events(resp)
+        stages = [e["stage"] for e in events]
+        assert "complete" in stages, f"No 'complete' event found. Stages: {stages}"
+
+    def test_stream_emits_error_event_on_service_failure(self, backend_client):
+        """When analysis service is unreachable, stream must emit an 'error' event."""
+        import httpx as _httpx
+
+        class FailingStreamResp:
+            status_code = 200
+            async def aiter_lines(self):
+                raise _httpx.ConnectError("refused")
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+
+        class FailingClient:
+            def stream(self, *args, **kwargs):
+                return FailingStreamResp()
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+
+        with patch("app.routers.analysis.httpx.AsyncClient", return_value=FailingClient()), \
+             patch("app.agents.memory.memory_agent.get_learning_context", new=AsyncMock(return_value={})), \
+             patch("app.models.database.Database.get_db", return_value=MagicMock(
+                 interactions=MagicMock(find_one=AsyncMock(return_value=None)),
+             )):
+            resp = backend_client.post(
+                "/api/analyze/stream",
+                json={"message": "Hello", "user_id": "user_abc123"},
+                headers={"Authorization": "Bearer fake-token"},
+            )
+
+        assert resp.status_code == 200
+        events = self._stream_events(resp)
+        stages = [e["stage"] for e in events]
+        assert "error" in stages, f"Expected 'error' event. Stages: {stages}"
