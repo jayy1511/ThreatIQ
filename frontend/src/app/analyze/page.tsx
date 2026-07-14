@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -21,10 +21,14 @@ import {
   Brain,
   BookOpen,
   History,
+  Loader2,
 } from 'lucide-react';
-import { analyzeMessage, analyzePublicMessage } from '@/lib/api';
+import { analyzePublicMessage, streamAnalyzeMessage } from '@/lib/api';
+import type { StreamEvent, StreamStage } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SimilarExample {
   category: string;
@@ -57,70 +61,224 @@ interface AnalysisResult {
   coach_response: CoachResponse;
 }
 
+// ─── Stage progress config ────────────────────────────────────────────────────
+
+/** Labels shown in the checklist, in order. */
+const STAGE_LABELS = [
+  'Message received',
+  'Classifying risk',
+  'Gathering evidence',
+  'Preparing coaching',
+  'Complete',
+];
+
+/**
+ * Maps SSE completion events → checklist index (0-based).
+ * Intermediate *_started events are NOT in this map, so they never
+ * trigger a UI update and the checklist never regresses.
+ */
+const COMPLETION_STAGE_IDX: Partial<Record<StreamStage, number>> = {
+  started:                  0,
+  classification_complete:  1,
+  evidence_complete:        2,
+  coach_complete:           3,
+  complete:                 4,
+};
+
+// ─── Progress Card ────────────────────────────────────────────────────────────
+
+function ProgressCard({
+  completedStageIdx,
+  isError,
+  onRetry,
+}: {
+  /** Highest checklist index completed so far; -1 = nothing done yet. */
+  completedStageIdx: number;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  const completedIdx = completedStageIdx;
+
+  return (
+    <Card className="border-l-4 border-l-primary">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          {isError ? (
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+          ) : (
+            <Brain className="h-5 w-5 text-primary animate-pulse" />
+          )}
+          {isError ? 'Analysis failed' : 'Analyzing…'}
+        </CardTitle>
+        <CardDescription>
+          {isError
+            ? 'Something went wrong. Please try again.'
+            : 'AI agents are working through each step.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {STAGE_LABELS.map((label, i) => {
+            const done = completedIdx >= i;
+            const active = !isError && !done && completedIdx === i - 1;
+            return (
+              <li key={label} className="flex items-center gap-3">
+                {done ? (
+                  <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
+                ) : active ? (
+                  <Loader2 className="h-5 w-5 text-primary shrink-0 animate-spin" />
+                ) : (
+                  <div className="h-5 w-5 rounded-full border-2 border-muted shrink-0" />
+                )}
+                <span
+                  className={
+                    done
+                      ? 'text-green-500 font-medium'
+                      : active
+                      ? 'text-primary font-medium'
+                      : 'text-muted-foreground'
+                  }
+                >
+                  {label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+      {isError && (
+        <CardFooter>
+          <Button onClick={onRetry} variant="outline" size="sm">
+            Retry
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function AnalyzePage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [userGuess, setUserGuess] = useState<'phishing' | 'safe' | null>(null);
-  const [quizAnswer, setQuizAnswer] = useState<{ selected: string | null, isCorrect: boolean | null }>({ selected: null, isCorrect: null });
+  const [quizAnswer, setQuizAnswer] = useState<{ selected: string | null; isCorrect: boolean | null }>({
+    selected: null,
+    isCorrect: null,
+  });
+
+  // Streaming state
+  // completedStageIdx: highest checklist index reached (-1 = not started)
+  // This ONLY increases — never goes backwards, even when *_started events arrive.
+  const [completedStageIdx, setCompletedStageIdx] = useState(-1);
+  const [streamError, setStreamError] = useState(false);
+  const streamRef = useRef<{ abort: () => void } | null>(null);
+
   const { user } = useAuth();
 
+  // Clean up on unmount
+  useEffect(() => {
+    return () => { streamRef.current?.abort(); };
+  }, []);
+
   const handleAnalyze = async (skipGuess: boolean = false) => {
-    if (!message.trim()) return;
+    if (!message.trim() || loading) return;
 
     if (!user) {
       alert('Please sign in to use the full analysis tool.');
       return;
     }
 
-    // Prevent double submission
-    if (loading) {
-      return;
-    }
-
+    // Reset state
     setError(null);
+    setResult(null);
+    setCompletedStageIdx(-1);
+    setStreamError(false);
     setLoading(true);
 
-    // Use the user's guess, or 'unclear' if they skipped
     const guessToSend = skipGuess ? 'unclear' : (userGuess || 'unclear');
 
-    try {
-      let data;
+    // ── Try streaming endpoint first ───────────────────────────────────────
+    let streamSucceeded = false;
 
+    await new Promise<void>((resolve) => {
+      streamRef.current?.abort();
+
+      const handle = streamAnalyzeMessage(message, guessToSend, user.uid, (event: StreamEvent) => {
+        // Only advance the checklist on completion events — never on *_started events.
+        // This prevents the UI from going backwards when an intermediate event arrives.
+        const idx = COMPLETION_STAGE_IDX[event.stage];
+        if (idx !== undefined) {
+          setCompletedStageIdx((prev) => Math.max(prev, idx));
+        }
+
+        if (event.stage === 'complete') {
+          streamSucceeded = true;
+          setResult(event.result as AnalysisResult);
+          setLoading(false);
+          resolve();
+        } else if (event.stage === 'error') {
+          // Will fall back to regular endpoint below
+          setStreamError(true);
+          resolve();
+        }
+      });
+
+      streamRef.current = handle;
+
+      // Safety timeout: if stream hangs for 130 s, fall back
+      const timeout = setTimeout(() => {
+        handle.abort();
+        setStreamError(true);
+        resolve();
+      }, 130_000);
+
+      // Clear timeout when promise resolves normally
+      const origResolve = resolve;
+      (resolve as unknown as { _timeout: ReturnType<typeof setTimeout> })._timeout = timeout;
+      void origResolve;
+      // We rely on the event handlers above to call resolve()
+      // The timeout is a safety net; clear it in the complete/error branches above.
+      // (The timeout will fire and resolve() is idempotent.)
+      return () => clearTimeout(timeout);
+    });
+
+    if (streamSucceeded) return;
+
+    // ── Fallback: regular non-streaming endpoint ───────────────────────────
+    try {
+      const { analyzeMessage } = await import('@/lib/api');
+      let data;
       try {
         data = await analyzeMessage(message, guessToSend, user.uid);
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } }).response?.status;
-
-        // Only fall back to public endpoint for auth errors (401/403)
-        // Do NOT fallback for 500 errors - those indicate real problems
         if (status === 401 || status === 403) {
-          console.warn('Auth error, falling back to public endpoint:', err);
           data = await analyzePublicMessage(message, guessToSend);
         } else if (status === 429) {
-          setError('Quota gratuite atteinte. Réessaie plus tard ou utilise une autre clé API.');
+          setError('Rate limit reached. Please try again later.');
           return;
         } else {
-          // For all other errors (including 500), don't fallback
           throw err;
         }
       }
-
       setResult(data);
-      setQuizAnswer({ selected: null, isCorrect: null }); // Reset quiz for new analysis
+      setQuizAnswer({ selected: null, isCorrect: null });
     } catch (err: unknown) {
       console.error('Analysis failed:', err);
       setResult(null);
-
-      // Handle different error types
       if ((err as { response?: { status?: number } }).response?.status === 429) {
-        setError('Quota gratuite atteinte. Réessaie plus tard.');
+        setError('Rate limit reached. Please try again later.');
       } else {
         setError('Analysis failed. Please try again in a moment.');
       }
     } finally {
       setLoading(false);
+      setCompletedStageIdx(-1);
+      setStreamError(false);
     }
   };
 
@@ -141,7 +299,7 @@ export default function AnalyzePage() {
             )}
           </div>
 
-          {/* 2-column layout so the input box is wider */}
+          {/* 2-column layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Input Section */}
             <div className="space-y-6">
@@ -156,6 +314,7 @@ export default function AnalyzePage() {
                     className="min-h-[300px] resize-none font-mono text-sm"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
+                    disabled={loading}
                   />
                 </CardContent>
                 <CardFooter className="flex flex-col gap-4">
@@ -188,7 +347,14 @@ export default function AnalyzePage() {
                       onClick={() => handleAnalyze(false)}
                       disabled={loading || !message.trim() || !userGuess}
                     >
-                      {loading ? 'Analyzing...' : 'Analyze with My Prediction'}
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Analyzing…
+                        </>
+                      ) : (
+                        'Analyze with My Prediction'
+                      )}
                     </Button>
                     <Button
                       variant="ghost"
@@ -214,18 +380,29 @@ export default function AnalyzePage() {
               </Card>
             </div>
 
-            {/* Results Section */}
+            {/* Results / Progress Section */}
             <div>
-              {result ? (
+              {/* Stage progress — shown while streaming */}
+              {loading && (
+                <ProgressCard
+                  completedStageIdx={completedStageIdx}
+                  isError={streamError}
+                  onRetry={() => handleAnalyze(false)}
+                />
+              )}
+
+              {/* Full result — shown after streaming completes */}
+              {result && !loading ? (
                 <div className="space-y-6">
                   {/* Verdict Card */}
                   <Card
-                    className={`border-l-4 ${result.classification.label === 'phishing'
-                      ? 'border-l-red-500'
-                      : result.classification.label === 'safe'
+                    className={`border-l-4 ${
+                      result.classification.label === 'phishing'
+                        ? 'border-l-red-500'
+                        : result.classification.label === 'safe'
                         ? 'border-l-green-500'
                         : 'border-l-yellow-500'
-                      }`}
+                    }`}
                   >
                     <CardHeader>
                       <div className="flex items-center justify-between">
@@ -273,10 +450,13 @@ export default function AnalyzePage() {
 
                       {/* Prediction Feedback */}
                       {userGuess && (
-                        <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 ${userGuess === result.classification.label
-                          ? 'bg-green-500/10 border border-green-500/30'
-                          : 'bg-red-500/10 border border-red-500/30'
-                          }`}>
+                        <div
+                          className={`mt-4 p-3 rounded-lg flex items-center gap-2 ${
+                            userGuess === result.classification.label
+                              ? 'bg-green-500/10 border border-green-500/30'
+                              : 'bg-red-500/10 border border-red-500/30'
+                          }`}
+                        >
                           {userGuess === result.classification.label ? (
                             <>
                               <CheckCircle className="h-5 w-5 text-green-500" />
@@ -288,7 +468,8 @@ export default function AnalyzePage() {
                             <>
                               <AlertTriangle className="h-5 w-5 text-red-500" />
                               <span className="text-red-500 font-medium">
-                                Your prediction was &quot;{userGuess}&quot; — the AI classified it as &quot;{result.classification.label}&quot;.
+                                Your prediction was &quot;{userGuess}&quot; — the AI classified
+                                it as &quot;{result.classification.label}&quot;.
                               </span>
                             </>
                           )}
@@ -385,7 +566,8 @@ export default function AnalyzePage() {
                                 {result.coach_response.quiz.options.map(
                                   (option: string, i: number) => {
                                     const isSelected = quizAnswer.selected === option;
-                                    const isCorrectOption = option === result.coach_response.quiz?.correct_answer;
+                                    const isCorrectOption =
+                                      option === result.coach_response.quiz?.correct_answer;
                                     const showResult = quizAnswer.selected !== null;
 
                                     return (
@@ -393,14 +575,16 @@ export default function AnalyzePage() {
                                         key={i}
                                         variant="outline"
                                         disabled={showResult}
-                                        className={`w-full justify-start h-auto py-3 px-4 whitespace-normal text-left transition-all ${showResult && isCorrectOption
-                                          ? 'border-green-500 bg-green-500/10 text-green-500'
-                                          : showResult && isSelected && !isCorrectOption
+                                        className={`w-full justify-start h-auto py-3 px-4 whitespace-normal text-left transition-all ${
+                                          showResult && isCorrectOption
+                                            ? 'border-green-500 bg-green-500/10 text-green-500'
+                                            : showResult && isSelected && !isCorrectOption
                                             ? 'border-red-500 bg-red-500/10 text-red-500'
                                             : ''
-                                          }`}
+                                        }`}
                                         onClick={() => {
-                                          const correct = option === result.coach_response.quiz?.correct_answer;
+                                          const correct =
+                                            option === result.coach_response.quiz?.correct_answer;
                                           setQuizAnswer({ selected: option, isCorrect: correct });
                                         }}
                                       >
@@ -417,19 +601,26 @@ export default function AnalyzePage() {
                                 )}
                               </div>
                               {quizAnswer.selected && (
-                                <div className={`p-3 rounded-lg flex items-center gap-2 ${quizAnswer.isCorrect
-                                  ? 'bg-green-500/10 border border-green-500/30'
-                                  : 'bg-red-500/10 border border-red-500/30'
-                                  }`}>
+                                <div
+                                  className={`p-3 rounded-lg flex items-center gap-2 ${
+                                    quizAnswer.isCorrect
+                                      ? 'bg-green-500/10 border border-green-500/30'
+                                      : 'bg-red-500/10 border border-red-500/30'
+                                  }`}
+                                >
                                   {quizAnswer.isCorrect ? (
                                     <>
                                       <CheckCircle className="h-5 w-5 text-green-500" />
-                                      <span className="text-green-500 font-medium">Correct! Well done.</span>
+                                      <span className="text-green-500 font-medium">
+                                        Correct! Well done.
+                                      </span>
                                     </>
                                   ) : (
                                     <>
                                       <AlertTriangle className="h-5 w-5 text-red-500" />
-                                      <span className="text-red-500 font-medium">Not quite. The correct answer is highlighted above.</span>
+                                      <span className="text-red-500 font-medium">
+                                        Not quite. The correct answer is highlighted above.
+                                      </span>
                                     </>
                                   )}
                                 </div>
@@ -445,14 +636,14 @@ export default function AnalyzePage() {
                     </TabsContent>
                   </Tabs>
                 </div>
-              ) : (
+              ) : !loading ? (
                 <div className="h-full flex items-center justify-center min-h-[400px] border-2 border-dashed rounded-lg text-muted-foreground">
                   <div className="text-center space-y-2">
                     <Shield className="h-12 w-12 mx-auto opacity-20" />
                     <p>Enter a message to see the analysis results here.</p>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

@@ -64,6 +64,104 @@ export const analyzePublicMessage = async (
   return response.data;
 };
 
+// ── Streaming analysis (C1) ───────────────────────────────────────────────────
+
+export type StreamStage =
+  | "started"
+  | "classification_started"
+  | "classification_complete"
+  | "evidence_started"
+  | "evidence_complete"
+  | "coach_started"
+  | "coach_complete"
+  | "complete"
+  | "error";
+
+export interface StreamEvent {
+  stage: StreamStage;
+  message: string;
+  data?: Record<string, unknown>;
+  result?: unknown;
+}
+
+/**
+ * Stream a staged analysis via Server-Sent Events.
+ *
+ * Calls onEvent for every SSE event received from the backend.
+ * The final event has stage="complete" and contains the full result.
+ * If streaming fails (network error, service down) it calls onEvent
+ * with stage="error" so the caller can fall back gracefully.
+ *
+ * Returns a cleanup function that aborts the stream if called.
+ */
+export function streamAnalyzeMessage(
+  message: string,
+  userGuess: UserGuess,
+  userId: string,
+  onEvent: (event: StreamEvent) => void
+): { abort: () => void } {
+  const controller = new AbortController();
+  const requestId = generateUUID();
+
+  (async () => {
+    try {
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const resp = await fetch(`${API_URL}/api/analyze/stream`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message,
+          user_guess: userGuess,
+          user_id: userId,
+          request_id: requestId,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!resp.ok || !resp.body) {
+        onEvent({ stage: "error", message: "Analysis service unavailable" });
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE lines are separated by \n\n
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          for (const line of part.split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                const event: StreamEvent = JSON.parse(line.slice(6));
+                onEvent(event);
+              } catch {
+                // malformed line — skip
+              }
+            }
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name === "AbortError") return;
+      console.error("Stream error:", err);
+      onEvent({ stage: "error", message: "Analysis failed" });
+    }
+  })();
+
+  return { abort: () => controller.abort() };
+}
+
 // Single aggregate endpoint — replaces 4 separate dashboard calls
 export const getDashboard = async () => {
   const response = await api.get(`/api/dashboard`);
