@@ -76,3 +76,80 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── Print portal: hidden on screen, visible only on print ─────────────────── */
+/* This MUST be a stylesheet rule (not an inline style) so that the @media print */
+/* block can override it with !important. Inline styles cannot be overridden by  */
+/* stylesheet !important in the same way when parent visibility is also at play. */
+#threat-iq-report-portal {
+  display: none;
+}
+
+/* ─── Print styles ──────────────────────────────────────────────────────────── */
+/* Only #threat-iq-report is shown when printing. Everything else is hidden.    */
+/* Forced light background + dark text so the PDF is readable regardless of     */
+/* whether the user is in dark mode.                                            */
+
+@media print {
+  /* Hide entire page by default */
+  body > * {
+    display: none !important;
+  }
+
+  /* Show only the report wrapper */
+  #threat-iq-report-portal {
+    display: block !important;
+  }
+
+  /* Force clean print colours */
+  #threat-iq-report,
+  #threat-iq-report * {
+    background: #ffffff !important;
+    color: #111111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Remove shadows and rounded corners for print */
+  #threat-iq-report .report-card {
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    margin-bottom: 16px !important;
+    padding: 16px !important;
+    page-break-inside: avoid;
+  }
+
+  /* Verdict colour accents */
+  #threat-iq-report .verdict-phishing { border-left: 4px solid #ef4444 !important; }
+  #threat-iq-report .verdict-safe     { border-left: 4px solid #22c55e !important; }
+  #threat-iq-report .verdict-unclear  { border-left: 4px solid #eab308 !important; }
+
+  /* Tag pills */
+  #threat-iq-report .report-tag {
+    display: inline-block;
+    border: 1px solid #9ca3af !important;
+    border-radius: 9999px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    margin: 2px !important;
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+  }
+
+  /* Disclaimer */
+  #threat-iq-report .report-disclaimer {
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    background: #f9fafb !important;
+    padding: 12px 16px !important;
+    font-size: 11px !important;
+    color: #6b7280 !important;
+  }
+
+  /* Page setup */
+  @page {
+    margin: 18mm 20mm;
+    size: A4 portrait;
+  }
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -22,11 +23,13 @@ import {
   BookOpen,
   History,
   Loader2,
+  FileDown,
 } from 'lucide-react';
 import { analyzePublicMessage, streamAnalyzeMessage } from '@/lib/api';
 import type { StreamEvent, StreamStage } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { AnalysisReport } from '@/components/AnalysisReport';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +180,13 @@ export default function AnalyzePage() {
   const [streamError, setStreamError] = useState(false);
   const streamRef = useRef<{ abort: () => void } | null>(null);
 
+  // Export state: when the last analysis was run (for the PDF report)
+  const [analysedAt, setAnalysedAt] = useState<Date | null>(null);
+
+  // createPortal requires the component to be mounted on the client
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
+
   const { user } = useAuth();
 
   // Clean up on unmount
@@ -197,6 +207,7 @@ export default function AnalyzePage() {
     setResult(null);
     setCompletedStageIdx(-1);
     setStreamError(false);
+    setAnalysedAt(null);
     setLoading(true);
 
     const guessToSend = skipGuess ? 'unclear' : (userGuess || 'unclear');
@@ -218,6 +229,7 @@ export default function AnalyzePage() {
         if (event.stage === 'complete') {
           streamSucceeded = true;
           setResult(event.result as AnalysisResult);
+          setAnalysedAt(new Date());
           setLoading(false);
           resolve();
         } else if (event.stage === 'error') {
@@ -283,6 +295,7 @@ export default function AnalyzePage() {
   };
 
   return (
+    <>
     <ProtectedRoute>
       <div className="container mx-auto py-10 px-4 max-w-7xl">
         <div className="flex flex-col gap-8">
@@ -394,6 +407,22 @@ export default function AnalyzePage() {
               {/* Full result — shown after streaming completes */}
               {result && !loading ? (
                 <div className="space-y-6">
+                  {/* ── Export button ──────────────────────────────────────── */}
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      id="export-report-btn"
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2 print:hidden"
+                      onClick={() => window.print()}
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Export Report
+                    </Button>
+                    <span className="text-xs text-muted-foreground print:hidden">
+                      Choose &ldquo;Save as PDF&rdquo; in the print dialog.
+                    </span>
+                  </div>
                   {/* Verdict Card */}
                   <Card
                     className={`border-l-4 ${
@@ -649,5 +678,32 @@ export default function AnalyzePage() {
         </div>
       </div>
     </ProtectedRoute>
+
+    {/* ── Print portal ─────────────────────────────────────────────────────── */}
+    {/* createPortal renders directly into document.body, bypassing all React  */}
+    {/* parent wrappers. The @media print CSS hides body > * then un-hides     */}
+    {/* #threat-iq-report-portal by ID (higher specificity than tag selector). */}
+    {/* A stylesheet display:none (not inline) on the portal ID lets the print */}
+    {/* media query override it with !important.                               */}
+    {isMounted && result && !loading && createPortal(
+      <div id="threat-iq-report-portal">
+        <AnalysisReport
+          data={{
+            classification: result.classification,
+            coach_response: result.coach_response,
+            userGuess: userGuess,
+            was_correct: userGuess
+              ? userGuess === result.classification.label
+              : null,
+            messageText: message,
+            showMessage: true,
+            analysedAt: analysedAt ?? new Date(),
+            category: (result as unknown as { category?: string }).category ?? null,
+          }}
+        />
+      </div>,
+      document.body
+    )}
+  </>
   );
 }
