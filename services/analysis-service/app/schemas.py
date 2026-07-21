@@ -27,6 +27,13 @@ class AnalysisRequest(BaseModel):
     )
     user_guess: Optional[UserGuess] = Field(None, description="User's prediction")
     learning_context: Optional[LearningContext] = None
+    # Optional email header block for sender verification (C5).
+    # Max length kept short so it covers standard headers without storing
+    # full email payloads.
+    header_text: Optional[str] = Field(
+        None, max_length=4_000,
+        description="Raw email headers for sender verification (optional)",
+    )
 
 
 class ClassificationResult(BaseModel):
@@ -141,9 +148,37 @@ class CoachResponse(BaseModel):
     quiz: Optional[QuizQuestion] = None
 
 
+class SenderVerificationTechnicalDetails(BaseModel):
+    """Technical email header fields (shown only in collapsed UI section)."""
+    from_domain: Optional[str] = None
+    reply_to_domain: Optional[str] = None
+    return_path_domain: Optional[str] = None
+    spf: Optional[str] = None
+    dkim: Optional[str] = None
+    dmarc: Optional[str] = None
+    link_domains: Optional[List[str]] = None
+    mismatches: Optional[List[str]] = None
+
+
+class SenderVerification(BaseModel):
+    """Sender verification result shown in the analysis result card (C5)."""
+    status: str = Field(
+        ...,
+        description="verified | suspicious | warning | unavailable",
+    )
+    summary: str = Field(..., description="Plain-language summary for normal users.")
+    signals: List[str] = Field(
+        default_factory=list,
+        description="Plain-language signal descriptions (max 4).",
+    )
+    technical_details: Optional[SenderVerificationTechnicalDetails] = None
+
+
 class AnalysisResponse(BaseModel):
     """Complete analysis response."""
     classification: ClassificationResult
     coach_response: CoachResponse
     was_correct: Optional[bool] = None
     category: str
+    # C5: optional — absent on legacy responses and body-only analyses
+    sender_verification: Optional[SenderVerification] = None

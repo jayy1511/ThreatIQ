@@ -158,10 +158,30 @@ class GmailTriageService:
         
         analysis_text = f"From: {from_header}\nSubject: {subject}\n\n{body[:1000]}"
         
+        # C5: extract sender-relevant headers from Gmail payload so the
+        # analysis service can run sender verification automatically.
+        # Only headers that carry authentication / routing signals are included.
+        # Raw values are never logged; they are forwarded to the service only.
+        _SV_HEADERS = (
+            'Reply-To',
+            'Return-Path',
+            'Authentication-Results',
+            'Received-SPF',
+        )
+        header_lines = [f"From: {from_header}"] if from_header else []
+        for hname in _SV_HEADERS:
+            hval = gmail_client.get_header(message, hname)
+            if hval:
+                header_lines.append(f"{hname}: {hval}")
+        header_text = "\n".join(header_lines) if header_lines else None
+        
         logger.info(f"Analyzing message {message_id}: {subject[:50]}")
         
         # Call the canonical analysis microservice (not the legacy root_agent)
-        analysis_result = await call_analysis_service_for_triage(analysis_text)
+        analysis_result = await call_analysis_service_for_triage(
+            analysis_text,
+            header_text=header_text,
+        )
         
         if not analysis_result:
             # Analysis service unavailable – skip gracefully
