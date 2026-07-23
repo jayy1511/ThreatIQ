@@ -38,6 +38,26 @@ function generateUUID(): string {
 export type UserGuess = 'phishing' | 'safe' | 'unclear';
 export const MAX_MESSAGE_LENGTH = 12_000;
 
+// ── Sender Verification types (C5) ───────────────────────────────────────────
+
+export interface SenderVerificationTechnicalDetails {
+  from_domain?: string;
+  reply_to_domain?: string;
+  return_path_domain?: string;
+  spf?: string;
+  dkim?: string;
+  dmarc?: string;
+  link_domains?: string[];
+  mismatches?: string[];
+}
+
+export interface SenderVerification {
+  status: 'verified' | 'suspicious' | 'warning' | 'unavailable';
+  summary: string;
+  signals: string[];
+  technical_details?: SenderVerificationTechnicalDetails | null;
+}
+
 export const analyzeMessage = async (
   message: string,
   userGuess: UserGuess,
@@ -92,13 +112,17 @@ export interface StreamEvent {
  * If streaming fails (network error, service down) it calls onEvent
  * with stage="error" so the caller can fall back gracefully.
  *
+ * @param headerText - Optional raw email header block for sender
+ *   verification (C5). Pass the value from the "Add email headers" textarea.
+ *
  * Returns a cleanup function that aborts the stream if called.
  */
 export function streamAnalyzeMessage(
   message: string,
   userGuess: UserGuess,
   userId: string,
-  onEvent: (event: StreamEvent) => void
+  onEvent: (event: StreamEvent) => void,
+  headerText?: string,
 ): { abort: () => void } {
   const controller = new AbortController();
   const requestId = generateUUID();
@@ -109,15 +133,21 @@ export function streamAnalyzeMessage(
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
+      const body: Record<string, unknown> = {
+        message,
+        user_guess: userGuess,
+        user_id: userId,
+        request_id: requestId,
+      };
+      // C5: only include when non-empty to keep the payload lean
+      if (headerText && headerText.trim()) {
+        body.header_text = headerText.trim();
+      }
+
       const resp = await fetch(`${API_URL}/api/analyze/stream`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          message,
-          user_guess: userGuess,
-          user_id: userId,
-          request_id: requestId,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 

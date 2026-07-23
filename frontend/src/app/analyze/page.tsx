@@ -26,10 +26,11 @@ import {
   FileDown,
 } from 'lucide-react';
 import { analyzePublicMessage, streamAnalyzeMessage } from '@/lib/api';
-import type { StreamEvent, StreamStage } from '@/lib/api';
+import type { StreamEvent, StreamStage, SenderVerification } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { AnalysisReport } from '@/components/AnalysisReport';
+import { SenderVerificationCard } from '@/components/SenderVerificationCard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,8 @@ interface Classification {
 interface AnalysisResult {
   classification: Classification;
   coach_response: CoachResponse;
+  // C5: optional sender verification result
+  sender_verification?: SenderVerification | null;
 }
 
 // ─── Stage progress config ────────────────────────────────────────────────────
@@ -180,6 +183,10 @@ export default function AnalyzePage() {
   const [streamError, setStreamError] = useState(false);
   const streamRef = useRef<{ abort: () => void } | null>(null);
 
+  // C5: optional email header text for sender verification
+  const [headerText, setHeaderText] = useState('');
+  const [showHeaderInput, setShowHeaderInput] = useState(false);
+
   // Export state: when the last analysis was run (for the PDF report)
   const [analysedAt, setAnalysedAt] = useState<Date | null>(null);
 
@@ -218,26 +225,33 @@ export default function AnalyzePage() {
     await new Promise<void>((resolve) => {
       streamRef.current?.abort();
 
-      const handle = streamAnalyzeMessage(message, guessToSend, user.uid, (event: StreamEvent) => {
-        // Only advance the checklist on completion events — never on *_started events.
-        // This prevents the UI from going backwards when an intermediate event arrives.
-        const idx = COMPLETION_STAGE_IDX[event.stage];
-        if (idx !== undefined) {
-          setCompletedStageIdx((prev) => Math.max(prev, idx));
-        }
+      const handle = streamAnalyzeMessage(
+        message,
+        guessToSend,
+        user.uid,
+        (event: StreamEvent) => {
+          // Only advance the checklist on completion events — never on *_started events.
+          // This prevents the UI from going backwards when an intermediate event arrives.
+          const idx = COMPLETION_STAGE_IDX[event.stage];
+          if (idx !== undefined) {
+            setCompletedStageIdx((prev) => Math.max(prev, idx));
+          }
 
-        if (event.stage === 'complete') {
-          streamSucceeded = true;
-          setResult(event.result as AnalysisResult);
-          setAnalysedAt(new Date());
-          setLoading(false);
-          resolve();
-        } else if (event.stage === 'error') {
-          // Will fall back to regular endpoint below
-          setStreamError(true);
-          resolve();
-        }
-      });
+          if (event.stage === 'complete') {
+            streamSucceeded = true;
+            setResult(event.result as AnalysisResult);
+            setAnalysedAt(new Date());
+            setLoading(false);
+            resolve();
+          } else if (event.stage === 'error') {
+            // Will fall back to regular endpoint below
+            setStreamError(true);
+            resolve();
+          }
+        },
+        // C5: pass headerText when provided
+        headerText || undefined,
+      );
 
       streamRef.current = handle;
 
@@ -381,16 +395,41 @@ export default function AnalyzePage() {
                 </CardFooter>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Analysis Tips</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>Include the full message body.</p>
-                  <p>Include headers if possible.</p>
-                  <p>Don&apos;t click links before analyzing.</p>
-                </CardContent>
-              </Card>
+              {/* C5: Optional email headers for sender verification */}
+              <div className="rounded-lg border bg-card">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowHeaderInput((v) => !v)}
+                  disabled={loading}
+                  aria-expanded={showHeaderInput}
+                >
+                  <span>Add email headers</span>
+                  <span aria-hidden="true">{showHeaderInput ? '▲' : '▼'}</span>
+                </button>
+                {showHeaderInput && (
+                  <div className="px-4 pb-4 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Optional. Paste the full email source or raw headers here to
+                      improve sender verification. This is not required.
+                    </p>
+                    <Textarea
+                      id="header-text-input"
+                      placeholder="From: sender@example.com&#10;Reply-To: other@example.com&#10;Authentication-Results: mx.google.com; spf=pass; dkim=pass"
+                      className="min-h-[120px] resize-none font-mono text-xs"
+                      value={headerText}
+                      onChange={(e) => setHeaderText(e.target.value)}
+                      disabled={loading}
+                      maxLength={4000}
+                    />
+                    {headerText.length > 0 && (
+                      <p className="text-xs text-muted-foreground text-right">
+                        {headerText.length}/4000 characters
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Results / Progress Section */}
@@ -507,7 +546,11 @@ export default function AnalyzePage() {
                     </CardContent>
                   </Card>
 
-                  {/* Detailed Analysis Tabs */}
+                  {/* C5: Sender Verification card — rendered only when data is present */}
+                  {'sender_verification' in result && (
+                    <SenderVerificationCard verification={result.sender_verification} />
+                  )}
+
                   <Tabs defaultValue="coach" className="w-full">
                     <TabsList className="grid w-full grid-cols-3">
                       <TabsTrigger value="coach">AI Coach</TabsTrigger>

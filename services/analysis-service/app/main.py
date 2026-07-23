@@ -3,6 +3,7 @@ Analysis Service - FastAPI Application
 
 Stateless AI analysis microservice for ThreatIQ.
 Handles message classification, evidence finding, and coaching.
+C5: sender verification (deterministic, no LLM) runs before classification.
 """
 
 from fastapi import FastAPI, HTTPException, Header, Depends
@@ -83,27 +84,30 @@ async def analyze_message(
 ):
     """
     Analyze a message for phishing indicators.
-    
+
     Requires a valid X-Internal-Service-Key header.
-    
+
     This endpoint runs the complete analysis pipeline:
+    0. Sender Verification (C5) — deterministic header parsing, no LLM
     1. Classifier Agent - Determines if message is phishing/safe/unclear
     2. Evidence Agent - Finds similar phishing examples
     3. Coach Agent - Generates educational coaching response
-    
+
     Args:
-        request: AnalysisRequest with message, optional user_guess and learning_context
-        
+        request: AnalysisRequest with message, optional user_guess,
+                 learning_context, and optional header_text (C5).
+
     Returns:
-        Complete analysis with classification, coaching, and evidence
+        Complete analysis with classification, coaching, evidence, and
+        optional sender_verification.
     """
     try:
         logger.info(f"Received analysis request: {len(request.message)} chars")
-        
+
         result = await run_analysis(request)
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Analysis failed")
@@ -123,22 +127,34 @@ async def analyze_message_stream(
     Stage-based streaming analysis endpoint.
 
     Yields SSE (Server-Sent Events) data lines as each pipeline step completes:
-      started → classification_complete → evidence_complete → coach_complete → complete
-    or an 'error' event on failure.
+      started → classification_started → classification_complete
+      → evidence_started → evidence_complete
+      → coach_started → coach_complete → complete | error
 
-    This is the real pipeline: events are emitted AFTER each agent actually finishes,
-    not faked timers.
+    C5: sender verification runs synchronously at the start (deterministic,
+    no extra latency for the user) and feeds context into the classifier.
     """
 
     async def event_generator():
         try:
             yield _sse_line({"stage": "started", "message": "Analysis started"})
 
-            # ── Step 1: Classify ──────────────────────────────────────────────
+            # ── Step 0: Sender verification (C5) ──────────────────────────────
+            from app.sender_verification import parse_and_verify, build_classifier_context
+            sender_verification = parse_and_verify(
+                message=request.message,
+                header_text=request.header_text,
+            )
+            sender_context = build_classifier_context(sender_verification)
+
+            # ── Step 1: Classify ───────────────────────────────────────────────
             yield _sse_line({"stage": "classification_started", "message": "Classifying message…"})
 
             from app.agents.classifier import classifier_agent
-            classification = await classifier_agent.classify(request.message)
+            classification = await classifier_agent.classify(
+                request.message,
+                sender_context=sender_context,
+            )
             category = classifier_agent.determine_category(
                 classification["reason_tags"],
                 request.message,
@@ -152,7 +168,7 @@ async def analyze_message_stream(
                 },
             })
 
-            # ── Step 2: Evidence ──────────────────────────────────────────────
+            # ── Step 2: Evidence ───────────────────────────────────────────────
             yield _sse_line({"stage": "evidence_started", "message": "Gathering evidence…"})
 
             from app.agents.evidence import evidence_agent
@@ -168,7 +184,7 @@ async def analyze_message_stream(
                 "data": {"examples_found": len(similar_examples)},
             })
 
-            # ── Step 3: Coach ─────────────────────────────────────────────────
+            # ── Step 3: Coach ──────────────────────────────────────────────────
             yield _sse_line({"stage": "coach_started", "message": "Preparing coaching…"})
 
             from app.agents.coach import coach_agent
@@ -192,16 +208,17 @@ async def analyze_message_stream(
             )
             yield _sse_line({"stage": "coach_complete", "message": "Coaching explanation ready"})
 
-            # ── Final result ──────────────────────────────────────────────────
+            # ── Final result ───────────────────────────────────────────────────
             was_correct = None
             if request.user_guess:
                 was_correct = request.user_guess.lower() == classification["label"].lower()
 
             result = {
-                "classification": classification,
-                "coach_response": coach_response,
-                "was_correct": was_correct,
-                "category": category,
+                "classification":      classification,
+                "coach_response":      coach_response,
+                "was_correct":         was_correct,
+                "category":            category,
+                "sender_verification": sender_verification,
             }
             yield _sse_line({"stage": "complete", "message": "Analysis complete", "result": result})
 

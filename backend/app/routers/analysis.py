@@ -120,7 +120,8 @@ async def analyze_message(
         result = await call_analysis_service_with_retry(
             message=request.message,
             user_guess=request.user_guess,
-            learning_context=learning_context
+            learning_context=learning_context,
+            header_text=getattr(request, 'header_text', None),
         )
         
         # Determine was_correct
@@ -284,6 +285,9 @@ async def analyze_message_stream(
         "user_guess": request.user_guess,
         "learning_context": learning_context,
     }
+    # C5: forward optional header_text for sender verification
+    if getattr(request, 'header_text', None):
+        payload["header_text"] = request.header_text
     headers: dict = {"Content-Type": "application/json"}
     if settings.analysis_service_api_key:
         headers["X-Internal-Service-Key"] = settings.analysis_service_api_key

@@ -20,6 +20,12 @@ class AnalysisRequest(BaseModel):
     )
     user_id: str = Field(..., description="Firebase UID")
     request_id: Optional[str] = Field(None, description="Optional request ID for idempotency or tracking")
+    # C5: optional email header block for sender verification.
+    # Max 4000 chars to cover standard headers without storing full payloads.
+    header_text: Optional[str] = Field(
+        None, max_length=4_000,
+        description="Raw email headers for sender verification (optional)",
+    )
 
 
 class PublicAnalysisRequest(BaseModel):
@@ -75,6 +81,8 @@ class AnalysisResponse(BaseModel):
     coach_response: CoachResponse
     was_correct: Optional[bool] = None
     session_id: str
+    # C5: optional sender verification — absent on legacy responses
+    sender_verification: Optional[Dict] = None
 
 
 class UserProfile(BaseModel):

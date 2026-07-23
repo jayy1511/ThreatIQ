@@ -44,6 +44,7 @@ async def call_analysis_service(
     message: str,
     user_guess: str | None = None,
     learning_context: dict | None = None,
+    header_text: str | None = None,
     *,
     max_retries: int = MAX_RETRIES,
     retry_delays: list[int] = RETRY_DELAYS,
@@ -56,6 +57,7 @@ async def call_analysis_service(
         message: The message text to analyse.
         user_guess: Optional user prediction ('phishing', 'safe', 'unclear').
         learning_context: Optional personalisation context dict.
+        header_text: Optional raw email headers for sender verification (C5).
         max_retries: How many total attempts to make.
         retry_delays: Per-attempt delay in seconds (back-off list).
         timeout: Per-request timeout in seconds.
@@ -71,6 +73,8 @@ async def call_analysis_service(
         "user_guess": user_guess,
         "learning_context": learning_context,
     }
+    if header_text:
+        payload["header_text"] = header_text
     headers = _build_headers()
     last_error: str | None = None
 
@@ -141,6 +145,7 @@ async def call_analysis_service(
 
 async def call_analysis_service_for_triage(
     message: str,
+    header_text: str | None = None,
 ) -> dict:
     """
     Lightweight wrapper for automated Gmail triage calls.
@@ -149,12 +154,17 @@ async def call_analysis_service_for_triage(
     does not stall the whole inbox batch.  Returns None on failure so the
     caller can treat one bad email as a soft error without aborting the
     rest of the batch.
+
+    Args:
+        message: The message text (may include From/Subject prefix).
+        header_text: Optional email header block from Gmail API (C5).
     """
     try:
         return await call_analysis_service(
             message=message,
             user_guess=None,
             learning_context=None,
+            header_text=header_text,
             max_retries=TRIAGE_MAX_RETRIES,
             retry_delays=TRIAGE_RETRY_DELAYS,
             timeout=TRIAGE_TIMEOUT,
